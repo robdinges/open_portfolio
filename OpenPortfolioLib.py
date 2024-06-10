@@ -585,7 +585,7 @@ class TransactionManager:
             raise ValueError(f"Unknown template: {template}")
         return self.templates[template](transaction_date, portfolio_id, account_id, **kwargs)
 
-    def buy_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost=0):
+    def buy_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost: float = None):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.BUY, amount, price)
         transaction = Transaction(transaction_date, portfolio_id, account_id)
@@ -621,7 +621,7 @@ class TransactionManager:
         logging.info("Created buy transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
         return transaction
 
-    def sell_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost=0):
+    def sell_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost: float = None):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.SELL, amount, price)
         transaction = Transaction(transaction_date, portfolio_id, account_id)
