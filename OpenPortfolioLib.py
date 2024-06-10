@@ -11,6 +11,7 @@ class TransactionTemplate(Enum):
     SELL = 'sale'
     DIVIDEND = 'dividend'
 
+
 class QuotationType(Enum):
     NOMINAL = 'nominal'
     AMOUNT = 'amount'
