@@ -1,7 +1,7 @@
-from datetime import datetime, timedelta, date
-from tabulate import tabulate
+from datetime import timedelta, date
 from enum import Enum
 import logging
+from tabulate import tabulate
 DEFAULT_CURRENCY = 'EUR'
 
 # enum classes
@@ -64,7 +64,7 @@ class TimeTravel:
         if days_to_skip <= 0:
             raise ValueError("Number of days to skip must be a positive integer.")
         self.current_date += timedelta(days=days_to_skip)
-        logging.info(f"Skipped {days_to_skip} days. New date: {self.current_date}")
+        logging.info("Skipped %s days. New date: %s", days_to_skip, self.current_date)
         return self.current_date
 
     def is_weekend(self, day):
@@ -78,7 +78,7 @@ class TimeTravel:
             self.current_date += timedelta(days=1)
             if not self.is_weekend(self.current_date):
                 days_skipped += 1
-        logging.info(f"Skipped {working_days_to_skip} working days. New date: {self.current_date}")
+        logging.info("Skipped {working_days_to_skip} working days. New date: {self.current_date}")
         return self.current_date
 
     def go_to_date(self, new_date: date):
@@ -87,7 +87,7 @@ class TimeTravel:
         if self.is_weekend(new_date):
             raise ValueError("New date must not be a weekend.")
         self.current_date = new_date
-        logging.info(f"Moved to new date: {self.current_date}")
+        logging.info("Moved to new date: %s", self.current_date)
         return self.current_date
 
 # client and portfolio classes
@@ -104,7 +104,7 @@ class Client:
                 raise ValueError(f"Portfolio with ID {portfolio_id} already exists for client {self.client_id}.")
         portfolio = Portfolio(portfolio_id, self.name, self.client_id)
         self.portfolios.append(portfolio)
-        logging.info(f"Added portfolio {portfolio_id} to client {self.client_id}")
+        logging.info("Added portfolio %s to client %s", portfolio_id, self.client_id)
         return portfolio
 
 class ProductCollection:
@@ -116,7 +116,7 @@ class ProductCollection:
 
     def search_product_id(self, product_id):
         return self.products.get(product_id)
-    
+
     def list_products(self):
         if not self.products:
             print("No products in the collection.")
@@ -155,7 +155,7 @@ class Portfolio:
             raise ValueError(f"Account with ID {account_id}, currency {currency}, and type {account_type} already exists.")
         cash_account = CashAccount(account_id, currency, account_type=account_type, start_balance=start_balance)
         self.cash_accounts[account_key] = cash_account
-        logging.info(f"Added cash account {account_id} to portfolio {self.portfolio_id}")
+        logging.info("Added cash account %s to portfolio %s", account_id, self.portfolio_id)
 
     def search_account_id(self, account_id, currency='EUR', account_type=AccountType.CASH):
         account_key = (account_id, currency, account_type)
@@ -585,7 +585,7 @@ class TransactionManager:
             raise ValueError(f"Unknown template: {template}")
         return self.templates[template](transaction_date, portfolio_id, account_id, **kwargs)
 
-    def buy_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost=None):
+    def buy_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost=0):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.BUY, amount, price)
         transaction = Transaction(transaction_date, portfolio_id, account_id)
@@ -598,7 +598,7 @@ class TransactionManager:
         )
         transaction.add_security_movement(security_movement)
 
-#toegevoegd       
+        #toegevoegd
         total_movement = CashMovement(
             transaction=transaction,
             amount_account_currency=-amount*price,
@@ -618,10 +618,10 @@ class TransactionManager:
         )
         transaction.add_cash_movement(cost_movement)
 
-        logging.info(f"Created buy transaction {transaction.transaction_number} for portfolio {portfolio_id}")
+        logging.info("Created buy transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
         return transaction
 
-    def sell_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost=None):
+    def sell_template(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost=0):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.SELL, amount, price)
         transaction = Transaction(transaction_date, portfolio_id, account_id)
