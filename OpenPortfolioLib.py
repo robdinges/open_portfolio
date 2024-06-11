@@ -159,7 +159,8 @@ class Portfolio:
         return (f'Portfolio Id: {self.portfolio_id}, Name: {self.name}, Client Id: {self.client_id}, '
                 f'Nr of cash accounts: {len(self.cash_accounts)}')
 
-    def add_cash_account(self, account_id, currency='EUR', account_type=AccountType.CASH, start_balance=0):
+    def add_cash_account(self, account_id, currency='EUR',
+                         account_type=AccountType.CASH, start_balance=0):
         """
         Add a cash account to the portfolio.
 
@@ -172,7 +173,12 @@ class Portfolio:
         account_key = (account_id, currency, account_type)
         if account_key in self.cash_accounts:
             raise ValueError(f"Account with ID {account_id}, currency {currency}, and type {account_type} already exists.")
-        cash_account = CashAccount(account_id, currency, account_type=account_type, start_balance=start_balance)
+        cash_account = CashAccount(
+            account_id,
+            currency,
+            account_type=account_type,
+            start_balance=start_balance
+        )
         self.cash_accounts[account_key] = cash_account
         logging.info("Added cash account %s to portfolio %s", account_id, self.portfolio_id)
 
@@ -227,7 +233,7 @@ class Portfolio:
         return [f"Transaction {transaction.transaction_number} successfully executed."]
 
     def calculate_return(self, start_date, end_date):
-        capital_change_types = {MovementType.DEPOSIT, MovementType.WITHDRAWAL, 
+        capital_change_types = {MovementType.DEPOSIT, MovementType.WITHDRAWAL,
                                 MovementType.TRANSFER_IN, MovementType.TRANSFER_OUT}
 
         capital_changes = []
@@ -269,8 +275,8 @@ class Portfolio:
                 return_percentage = (return_amount / a) if a != 0 else 0
                 cumulative_return_percentage *= (1 + return_percentage)
                 periodic_returns.append([
-                    start_of_period, end_of_period, b, a, return_amount, 
-                    return_percentage, cumulative_return_amount, 
+                    start_of_period, end_of_period, b, a, return_amount,
+                    return_percentage, cumulative_return_amount,
                     cumulative_return_percentage - 1
                 ])
 
@@ -409,7 +415,7 @@ class Portfolio:
                     account_type
                 ]
                 table_data.append(row)
-            
+
             # Fetch and display security movements
             for sm in tx['security_movements']:
                 account_type = "SECURITIES"
@@ -427,48 +433,6 @@ class Portfolio:
                     account_type
                 ]
                 table_data.append(row)
-
-        print(tabulate(table_data, headers=headers, tablefmt="grid"))
-
-    def list_holdings2(self, valuation_date=None):
-        """
-        Lists the holdings in the portfolio for the given valuation date.
-        If no valuation date is provided, uses the current date from TimeTravel.
-        """
-        time_travel = TimeTravel()
-        if valuation_date is None:
-            valuation_date = time_travel.current_date
-
-        if not self.securities_account.holdings:
-            print("No holdings in the portfolio.")
-            return
-
-        print(f"Holdings in Portfolio as of {valuation_date}:")
-        headers = ["Product ID", "Description", "Type", "Amount", "Price", "Value"]
-        table_data = []
-
-        for holding in self.securities_account.holdings:
-            product = holding['product']
-            total_amount = 0
-            for transaction in product.transactions:
-                for movement in transaction.security_movements:
-                    if movement.transaction_date <= valuation_date and movement.product_id == product.instrument_id:
-                        if movement.movement_type == MovementType.SECURITY_BUY:
-                            total_amount += movement.amount_nominal
-                        elif movement.movement_type == MovementType.SECURITY_SELL:
-                            total_amount -= movement.amount_nominal
-
-            if total_amount > 0:
-                price = product.get_price(valuation_date)
-                value = total_amount * price
-                table_data.append([
-                    product.instrument_id,
-                    product.description,
-                    product.type.name,
-                    total_amount,
-                    price,
-                    value
-                ])
 
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
@@ -517,27 +481,18 @@ class Portfolio:
 
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-    def list_holdings1(self):
+    def print_account_balance(self, account_id, currency='EUR', account_type=AccountType.CASH):
         """
-        tbd
+        Print the balance of a given account.
+
+        Args:
+            account_id (int): The ID of the account.
+            currency (str): The currency of the account. Defaults to 'EUR'.
+            account_type (AccountType): The type of the account. Defaults to AccountType.CASH.
         """
-        if not self.securities_account.holdings:
-            print("No holdings in the portfolio.")
-            return
-        print("Holdings in Portfolio:")
-        headers = ["Product ID", "Description", "Type", "Amount", "Price", "Value"]
-        table_data = [
-            [
-                holding['product'].instrument_id,
-                holding['product'].description,
-                holding['product'].type.name,
-                holding['amount'],
-                holding['product'].get_price(date.today()),
-                holding['amount'] * holding['product'].get_price(date.today())
-            ]
-            for holding in self.securities_account.holdings
-        ]
-        print(tabulate(table_data, headers=headers, tablefmt="grid"))      
+        account = self.search_account_id(account_id, currency, account_type)
+        if account:
+            print(f"Balance for account {account_id}: {account.balance}")
 
 class PortfolioAnalytics:
     def __init__(self, portfolio):
@@ -561,13 +516,13 @@ class PortfolioAnalytics:
         """
         holdings_progress = []
         changes = set()
-        
+
         # Find the product in the portfolio's holdings
         for holding in self.portfolio.securities_account.holdings:
             if holding['product'].instrument_id == product_id:
                 product = holding['product']
                 amount_on_date = 0
-                
+
                 # Collect changes in amount and price
                 for transaction in product.transactions:
                     for movement in transaction.security_movements:
@@ -577,14 +532,14 @@ class PortfolioAnalytics:
                                 amount_on_date += movement.amount_nominal
                             elif movement.movement_type == MovementType.SECURITY_SELL:
                                 amount_on_date -= movement.amount_nominal
-                
+
                 # Add price changes
                 for price_date, _ in product.prices:
                     changes.add(price_date)
-        
+
         # Sort changes by date
         changes = sorted(changes)
-        
+
         # Track holdings progress over time
         amount_on_date = 0
         for change_date in changes:
@@ -596,7 +551,7 @@ class PortfolioAnalytics:
                             amount_on_date += movement.amount_nominal
                         elif movement.movement_type == MovementType.SECURITY_SELL:
                             amount_on_date -= movement.amount_nominal
-            
+
             value = amount_on_date * price if price != "N/A" else 0
             holdings_progress.append({
                 "Date": change_date,
@@ -604,7 +559,7 @@ class PortfolioAnalytics:
                 "Price": price,
                 "Value": value
             })
-        
+
         return holdings_progress
 
 # account classes
@@ -672,7 +627,7 @@ class SecuritiesAccount:
             holding_values.append([valuation_date, float(value), product.instrument_id, amount_on_date, price, currency_price])
 
         return holding_values
-    
+
     def calculate_accrued_interest(self, bond, valuation_date):
         # This method calculates the accrued interest for a bond up to the valuation_date.
         # This is a placeholder implementation. Actual implementation will depend on the interest type and payment frequency.
@@ -746,7 +701,7 @@ class CashMovement:
         self.amount_original_currency = amount_original_currency
         self.movement_type = movement_type
         self.transaction_number = transaction_number
-          
+
 class SecurityMovement:
     def __init__(self, transaction, product_id, amount_nominal, price, movement_type: MovementType):
         self.movement_type = movement_type
@@ -802,7 +757,7 @@ class TransactionManager:
         )
         transaction.add_cash_movement(total_movement)
 
-        
+
         cost_movement = CashMovement(
             transaction=transaction,
             amount_account_currency=-cost,
@@ -828,7 +783,7 @@ class TransactionManager:
         )
         transaction.add_security_movement(security_movement)
 
-#toegevoegd       
+        # toegevoeg
         total_movement = CashMovement(
             transaction=transaction,
             amount_account_currency=amount*price,
@@ -958,7 +913,7 @@ class Transaction:
 
         if not portfolio:
             messages.append("The portfolio does not exist.")
-     
+
         if not portfolio.client_id:
             messages.append("The client does not exist.")
 
@@ -977,39 +932,12 @@ class Transaction:
                     messages.append("Insufficient balance for the purchase.")
             elif movement.movement_type == MovementType.SECURITY_SELL:
                 total_holding = sum(
-                    h['amount'] for h in portfolio.securities_account.holdings 
+                    h['amount'] for h in portfolio.securities_account.holdings
                     if h['product'].instrument_id == movement.product_id
                 )
                 if total_holding < movement.amount_nominal:
                     messages.append(f"Insufficient holdings for product {movement.product_id}.")
 
-        if messages:
-            return False, messages
-        return True, ["Transaction is valid."]
-
-    def validate_transaction1(self, portfolio, product_collection):
-        messages = []
-
-        if not portfolio:
-            messages.append("The portfolio does not exist.")
-     
-        if not portfolio.client_id:
-            messages.append("The client does not exist.")
-
-        for movement in self.cash_movements:
-            if not portfolio.search_account_id(movement.cash_account_id):
-                messages.append(f"The account {movement.cash_account_id} does not exist.")
-
-        for movement in self.security_movements:
-            product = product_collection.search_product_id(movement.product_id)
-            if not product:
-                messages.append(f"The product {movement.product_id} does not exist.")
-            if movement.movement_type == MovementType.SECURITY_BUY:
-                cash_account = portfolio.search_account_id(movement.account_id)
-                cost = movement.amount_nominal * movement.price
-                if cash_account.balance < cost:
-                    messages.append("Insufficient balance for the purchase.")
-        
         if messages:
             return False, messages
         return True, ["Transaction is valid."]
@@ -1024,41 +952,6 @@ class Transaction:
 
         Returns:
             list: A list of messages indicating the result of the execution.
-        """
-        is_valid, messages = self.validate_transaction(portfolio, product_collection)
-        if not is_valid:
-            for message in messages:
-                logging.error(message)
-            return messages
-
-        for movement in self.security_movements:
-            product = product_collection.search_product_id(movement.product_id)
-            if product:
-                existing_holding = next((h for h in portfolio.securities_account.holdings if h['product'].instrument_id == product.instrument_id), None)
-                if existing_holding:
-                    existing_holding['amount'] += movement.amount_nominal
-                else:
-                    portfolio.securities_account.holdings.append({
-                        'product': product,
-                        'amount': movement.amount_nominal
-                    })
-                product.add_transaction(self)
-
-        for movement in self.cash_movements:
-            account = portfolio.search_account_id(movement.cash_account_id)
-            if account:
-                account.balance += movement.amount_account_currency
-
-        account = portfolio.search_account_id(self.account_id)
-        if account and self not in account.transactions:
-            account.add_transaction(self)
-
-        logging.info("Transaction executed: %s", self.transaction_number)
-        return [f"Transaction {self.transaction_number} successfully executed."]
-
-    def execute1(self, portfolio, product_collection):
-        """
-        tbd
         """
         is_valid, messages = self.validate_transaction(portfolio, product_collection)
         if not is_valid:
