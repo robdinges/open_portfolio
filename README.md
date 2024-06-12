@@ -1,11 +1,11 @@
 # OpenPortfolio
 
 ## To do
+
 - opgebouwde rente berekenen
-- validate_transaction: cost is amount * price
+-- 360, ACT etc
 - kosten berekenen
 - spaarrente berekenen
-- controleren op oa min orderwaarde
 - vreemde valuta toevoegen
 - vervangen n/a door waarschuwing: geen valuta
 
