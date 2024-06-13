@@ -6,7 +6,6 @@
 -- 360, ACT etc
 - kosten berekenen
 - spaarrente berekenen
-- vreemde valuta toevoegen
 - vervangen n/a door waarschuwing: geen valuta
 
 - inlezen producten
