@@ -46,6 +46,7 @@ class MovementType(Enum):
     COSTS = 'costs'
     SECURITY_BUY = 'security_buy'
     SECURITY_SELL = 'security_sell'
+    ACCRUED_INTEREST = 'accrued_interest'
     DEPOSIT = 'deposit'
     WITHDRAWAL = 'withdrawal'
     INTEREST = 'interest'
@@ -625,14 +626,15 @@ class SecuritiesAccount:
             value = amount_on_date * price * currency_price
 
             if isinstance(product, Bond):
-                accrued_interest = self.calculate_accrued_interest(product, valuation_date)
+                time_travel = TimeTravel()
+                accrued_interest = product.calculate_accrued_interest(holding['amount'], time_travel, valuation_date)
                 value += accrued_interest
 
             holding_values.append([valuation_date, float(value), product.instrument_id, amount_on_date, price, currency_price])
 
         return holding_values
 
-    def calculate_accrued_interest(self, bond, valuation_date):
+    def calculate_accrued_interest_oud(self, bond, valuation_date):
         # This method calculates the accrued interest for a bond up to the valuation_date.
         # This is a placeholder implementation. Actual implementation will depend on the interest type and payment frequency.
         return 0.0
@@ -828,6 +830,23 @@ class TransactionManager:
             exchange_rate=exchange_rate  # Voeg dit toe
         )
         transaction.add_cash_movement(cost_movement)
+
+        '''
+        if isinstance(product, Bond):
+            time_travel = TimeTravel()
+            accrued_interest = product.calculate_accrued_interest(holding['amount'], time_travel, valuation_date)
+            value += accrued_interest
+
+            ai_movement = CashMovement(
+                transaction=transaction,
+                amount_account_currency=-accrued_interest,
+                amount_original_currency=-accrued_interest * exchange_rate,
+                movement_type=MovementType.ACCRUED_INTEREST,
+                transaction_number=transaction.transaction_number,
+                exchange_rate=exchange_rate  # Voeg dit toe
+            )
+            transaction.add_cash_movement(ai_movement)
+            '''
 
         logging.info("Created buy transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
         return transaction
