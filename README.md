@@ -2,7 +2,6 @@
 
 ## To do
 
-- opgebouwde rente berekenen
 -- 360, ACT etc
 - kosten berekenen
 - spaarrente berekenen
