@@ -709,7 +709,7 @@ class Bond(Product):
         self.interest_rate = interest_rate
         self.interest_payment_frequency = interest_payment_frequency
 
-    def calculate_accrued_interest(self, nominal_value, time_travel, valuation_date=None):
+    def calculate_accrued_interest1(self, nominal_value, time_travel, valuation_date=None):
         """
         Calculates the accrued interest based on the given valuation date and nominal value.
 
@@ -746,7 +746,41 @@ class Bond(Product):
             days_held = (valuation_date - last_payment_date).days
 
         # Calculate accrued interest
-        return nominal_value * self.interest_rate * (days_held / 365)
+        return nominal_value * self.interest_rate * (days_held / 366)
+
+    def calculate_accrued_interest(self, nominal_value, time_travel, valuation_date, interest_type=InterestType.ACT_ACT):
+        """Calculate accrued interest for the bond up to the valuation date."""
+        if interest_type == InterestType.ACT_ACT:
+            return self.calculate_accrued_interest_act_act(nominal_value, valuation_date)
+        elif interest_type == InterestType.THIRTY_360:
+            return self.calculate_accrued_interest_thirty_360(nominal_value, valuation_date)
+        else:
+            raise ValueError("Unsupported interest type")
+
+    def calculate_accrued_interest_act_act(self, nominal_value, valuation_date):
+        """Calculate accrued interest using ACT/ACT convention."""
+        days_in_year = 366 if self.is_leap_year_in_period(self.start_date, valuation_date) else 365
+        days_accrued = (valuation_date - self.start_date).days
+        accrued_interest = nominal_value * self.interest_rate * (days_accrued / days_in_year)
+        return accrued_interest
+
+    def is_leap_year_in_period(self, start_date, end_date):
+        """Check if there is a leap year in the period."""
+        current_date = start_date
+        while current_date <= end_date:
+            if current_date.month == 2 and current_date.day == 29:
+                return True
+            current_date += timedelta(days=1)
+        return False
+
+    def calculate_accrued_interest_thirty_360(self, nominal_value, valuation_date):
+        """Dummy implementation for 30/360 convention."""
+        days_in_year = 360
+        days_accrued = ((valuation_date.year - self.start_date.year) * 360 +
+                        (valuation_date.month - self.start_date.month) * 30 +
+                        (valuation_date.day - self.start_date.day))
+        accrued_interest = nominal_value * self.interest_rate * (days_accrued / days_in_year)
+        return accrued_interest
 
 class Stock(Product):
     def __init__(self, product_id, description, minimum_purchase_value, smallest_trading_unit, issue_currency):
