@@ -1,11 +1,10 @@
 # OpenPortfolio
 
 ## To do
-
--- 360, ACT etc
 - kosten berekenen
 - spaarrente berekenen
 - vervangen n/a door waarschuwing: geen valuta
+- controle of een instrument klopt bij opvoer: 
 
 - inlezen producten
 - inlezen transacties
@@ -17,4 +16,3 @@
 - user interface
 - api
 - database gebruiken
-- testscripts standaard berekeningen

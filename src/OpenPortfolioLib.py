@@ -101,11 +101,11 @@ class Client:
         self.name = name
         self.portfolios = []
 
-    def add_portfolio(self, portfolio_id):
+    def add_portfolio(self, portfolio_id, default_currency='EUR', cost_in_transaction_currency=True):
         for portfolio in self.portfolios:
             if portfolio.portfolio_id == portfolio_id:
                 raise ValueError(f"Portfolio with ID {portfolio_id} already exists for client {self.client_id}.")
-        portfolio = Portfolio(portfolio_id, self.name, self.client_id)
+        portfolio = Portfolio(portfolio_id, self.name, self.client_id, default_currency, cost_in_transaction_currency)
         self.portfolios.append(portfolio)
         logging.info("Added portfolio %s to client %s", portfolio_id, self.client_id)
         return portfolio
@@ -140,7 +140,7 @@ class ProductCollection:
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 class Portfolio:
-    def __init__(self, portfolio_id, name, client_id):
+    def __init__(self, portfolio_id, name, client_id, default_currency='EUR', cost_in_transaction_currency=True):
         """
         Initialize a new Portfolio.
 
@@ -152,10 +152,11 @@ class Portfolio:
         self.portfolio_id = portfolio_id
         self.name = name
         self.client_id = client_id
+        self.default_currency = default_currency
+        self.cost_in_transaction_currency = cost_in_transaction_currency
         self.cash_accounts = {}
         self.securities_account = SecuritiesAccount(portfolio_id)
-        self.add_cash_account(self.portfolio_id, start_balance=0)
-
+        self.add_cash_account(self.portfolio_id, currency=self.default_currency, start_balance=0)
     def __repr__(self):
         return (f'Portfolio Id: {self.portfolio_id}, Name: {self.name}, Client Id: {self.client_id}, '
                 f'Nr of cash accounts: {len(self.cash_accounts)}')
@@ -709,45 +710,6 @@ class Bond(Product):
         self.interest_rate = interest_rate
         self.interest_payment_frequency = interest_payment_frequency
 
-    def calculate_accrued_interest1(self, nominal_value, time_travel, valuation_date=None):
-        """
-        Calculates the accrued interest based on the given valuation date and nominal value.
-
-        Args:
-            nominal_value (float): The nominal value of the bond.
-            time_travel (TimeTravel): The TimeTravel instance to get the current date if valuation_date is not provided.
-            valuation_date (date, optional): The date for which the accrued interest needs to be calculated. Defaults to time_travel.current_date.
-
-        Returns:
-            float: The calculated accrued interest.
-        """
-        if valuation_date is None:
-            valuation_date = time_travel.current_date
-
-        if valuation_date < self.start_date or (self.maturity_date and valuation_date > self.maturity_date):
-            return 0.0
-
-        # Determine the last payment date based on the PaymentFrequency
-        if self.interest_payment_frequency == PaymentFrequency.END_DATE:
-            last_payment_date = self.start_date
-        else:
-            current_date = self.start_date
-            while current_date <= valuation_date:
-                last_payment_date = current_date
-                if self.interest_payment_frequency == PaymentFrequency.MONTH:
-                    current_date += timedelta(days=30)
-                elif self.interest_payment_frequency == PaymentFrequency.YEAR:
-                    current_date += timedelta(days=365)
-
-        # If the last payment date is the start date or within the first payment period
-        if valuation_date <= last_payment_date + timedelta(days=30) or self.interest_payment_frequency == PaymentFrequency.END_DATE:
-            days_held = (valuation_date - self.start_date).days
-        else:
-            days_held = (valuation_date - last_payment_date).days
-
-        # Calculate accrued interest
-        return nominal_value * self.interest_rate * (days_held / 366)
-
     def calculate_accrued_interest(self, nominal_value, time_travel, valuation_date, interest_type=InterestType.ACT_ACT):
         """Calculate accrued interest for the bond up to the valuation date."""
         if interest_type == InterestType.ACT_ACT:
@@ -826,31 +788,24 @@ class TransactionManager:
         # For example, let's assume a flat fee of 1% of the transaction value
         return 0.01 * amount * price
 
-    def create_transaction1(self, transaction_date, portfolio_id, template, account_id, **kwargs):
+    def create_transaction(self, transaction_date, portfolio_id, template, account_id, portfolio, product_collection, **kwargs):
         if template not in self.templates:
             raise ValueError(f"Unknown template: {template}")
         exchange_rate = kwargs.get('exchange_rate', 1.0)
-        return self.templates[template](transaction_date, portfolio_id, account_id, exchange_rate=exchange_rate, **kwargs)
+        transaction_currency = kwargs.get('transaction_currency', portfolio.default_currency)
+        return self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, exchange_rate=exchange_rate, transaction_currency=transaction_currency, **kwargs)
 
-    def create_transaction(self, transaction_date, portfolio_id, template, account_id, product_collection, **kwargs):
-        if template not in self.templates:
-            raise ValueError(f"Unknown template: {template}")
-        exchange_rate = kwargs.get('exchange_rate', 1.0)
-        return self.templates[template](transaction_date, portfolio_id, account_id, product_collection, exchange_rate=exchange_rate, **kwargs)
-
-    def buy_template1(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost: float = None, exchange_rate=1.0):
+    def buy_template(self, transaction_date, portfolio_id, account_id, portfolio, product_collection, product_id, amount, price, cost=None, exchange_rate=1.0):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.BUY, amount, price)
 
-        '''
-        # Haal het product op uit de collectie
+        # Retrieve the product from the collection
         product = product_collection.search_product_id(product_id)
         if product is None:
             logging.error("Product with ID %s not found", product_id)
             return None
-        '''
 
-        transaction = Transaction(transaction_date, portfolio_id, account_id)
+        transaction = Transaction(transaction_date, portfolio_id, account_id, portfolio.default_currency)
         security_movement = SecurityMovement(
             transaction=transaction,
             product_id=product_id,
@@ -862,11 +817,11 @@ class TransactionManager:
 
         total_movement = CashMovement(
             transaction=transaction,
-            amount_account_currency=-amount*price,
-            amount_original_currency=-amount*price * exchange_rate,
+            amount_account_currency=-amount * price,
+            amount_original_currency=-amount * price * exchange_rate,
             movement_type=MovementType.SECURITY_BUY,
             transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
+            exchange_rate=exchange_rate
         )
         transaction.add_cash_movement(total_movement)
 
@@ -876,111 +831,10 @@ class TransactionManager:
             amount_original_currency=-cost * exchange_rate,
             movement_type=MovementType.COSTS,
             transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
+            exchange_rate=exchange_rate
         )
         transaction.add_cash_movement(cost_movement)
 
-        '''
-        if isinstance(product, Bond):
-            time_travel = TimeTravel()
-            accrued_interest = product.calculate_accrued_interest(holding['amount'], time_travel, valuation_date)
-            value += accrued_interest
-
-            ai_movement = CashMovement(
-                transaction=transaction,
-                amount_account_currency=-accrued_interest,
-                amount_original_currency=-accrued_interest * exchange_rate,
-                movement_type=MovementType.ACCRUED_INTEREST,
-                transaction_number=transaction.transaction_number,
-                exchange_rate=exchange_rate  # Voeg dit toe
-            )
-            transaction.add_cash_movement(ai_movement)
-            '''
-
-        logging.info("Created buy transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
-        return transaction
-
-    def sell_template1(self, transaction_date, portfolio_id, account_id, product_id, amount, price, cost: float = None, exchange_rate=1.0):
-        if cost is None:
-            cost = self.calculate_cost(TransactionTemplate.SELL, amount, price)
-        transaction = Transaction(transaction_date, portfolio_id, account_id)
-        security_movement = SecurityMovement(
-            transaction=transaction,
-            product_id=product_id,
-            amount_nominal=amount,
-            price=price,
-            movement_type=MovementType.SECURITY_SELL
-        )
-        transaction.add_security_movement(security_movement)
-
-        total_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=amount*price,
-            amount_original_currency=amount*price * exchange_rate,
-            movement_type=MovementType.SECURITY_SELL,
-            transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
-        )
-        transaction.add_cash_movement(total_movement)
-
-        cost_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=-cost,
-            amount_original_currency=-cost * exchange_rate,
-            movement_type=MovementType.COSTS,
-            transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
-        )
-        transaction.add_cash_movement(cost_movement)
-
-        logging.info("Created sell transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
-        return transaction
-
-    def buy_template(self, transaction_date, portfolio_id, account_id, product_collection, product_id, amount, price, cost: float = None, exchange_rate=1.0):
-        if cost is None:
-            cost = self.calculate_cost(TransactionTemplate.BUY, amount, price)
-
-        # Haal het product op uit de collectie
-        product = product_collection.search_product_id(product_id)
-        if product is None:
-            logging.error("Product with ID %s not found", product_id)
-            return None
-
-        # Extract necessary product details
-        product_details = product.get_details()
-        logging.info("Product details: %s", product_details)
-
-        transaction = Transaction(transaction_date, portfolio_id, account_id)
-        security_movement = SecurityMovement(
-            transaction=transaction,
-            product_id=product_id,
-            amount_nominal=amount,
-            price=price,
-            movement_type=MovementType.SECURITY_BUY
-        )
-        transaction.add_security_movement(security_movement)
-
-        total_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=-amount*price,
-            amount_original_currency=-amount*price * exchange_rate,
-            movement_type=MovementType.SECURITY_BUY,
-            transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
-        )
-        transaction.add_cash_movement(total_movement)
-
-        cost_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=-cost,
-            amount_original_currency=-cost * exchange_rate,
-            movement_type=MovementType.COSTS,
-            transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
-        )
-        transaction.add_cash_movement(cost_movement)
-
-        
         if isinstance(product, Bond):
             time_travel = TimeTravel()
             accrued_interest = product.calculate_accrued_interest(amount, time_travel, transaction_date)
@@ -991,25 +845,30 @@ class TransactionManager:
                 amount_original_currency=-accrued_interest * exchange_rate,
                 movement_type=MovementType.ACCRUED_INTEREST,
                 transaction_number=transaction.transaction_number,
-                exchange_rate=exchange_rate  # Voeg dit toe
+                exchange_rate=exchange_rate
             )
             transaction.add_cash_movement(ai_movement)
-            
 
         logging.info("Created buy transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
         return transaction
 
-    def sell_template(self, transaction_date, portfolio_id, account_id, product_collection, product_id, amount, price, cost: float = None, exchange_rate=1.0):
+    def create_transaction(self, transaction_date, portfolio_id, template, account_id, portfolio, product_collection, **kwargs):
+        if template not in self.templates:
+            raise ValueError(f"Unknown template: {template}")
+        exchange_rate = kwargs.get('exchange_rate', 1.0)
+        return self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, exchange_rate=exchange_rate, **kwargs)
+
+    def sell_template(self, transaction_date, portfolio_id, account_id, portfolio, product_collection, product_id, amount, price, cost=None, exchange_rate=1.0):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.SELL, amount, price)
 
-        # Haal het product op uit de collectie
+        # Retrieve the product from the collection
         product = product_collection.search_product_id(product_id)
         if product is None:
             logging.error("Product with ID %s not found", product_id)
             return None
 
-        transaction = Transaction(transaction_date, portfolio_id, account_id)
+        transaction = Transaction(transaction_date, portfolio_id, account_id, portfolio.default_currency)
         security_movement = SecurityMovement(
             transaction=transaction,
             product_id=product_id,
@@ -1021,11 +880,11 @@ class TransactionManager:
 
         total_movement = CashMovement(
             transaction=transaction,
-            amount_account_currency=amount*price,
-            amount_original_currency=amount*price * exchange_rate,
+            amount_account_currency=amount * price,
+            amount_original_currency=amount * price * exchange_rate,
             movement_type=MovementType.SECURITY_SELL,
             transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
+            exchange_rate=exchange_rate
         )
         transaction.add_cash_movement(total_movement)
 
@@ -1035,7 +894,7 @@ class TransactionManager:
             amount_original_currency=-cost * exchange_rate,
             movement_type=MovementType.COSTS,
             transaction_number=transaction.transaction_number,
-            exchange_rate=exchange_rate  # Voeg dit toe
+            exchange_rate=exchange_rate
         )
         transaction.add_cash_movement(cost_movement)
 
@@ -1049,26 +908,14 @@ class TransactionManager:
                 amount_original_currency=accrued_interest * exchange_rate,
                 movement_type=MovementType.ACCRUED_INTEREST,
                 transaction_number=transaction.transaction_number,
-                exchange_rate=exchange_rate  # Voeg dit toe
+                exchange_rate=exchange_rate
             )
             transaction.add_cash_movement(ai_movement)
-            
+
         logging.info("Created sell transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
         return transaction
 
     def dividend_template(self, transaction_date, portfolio_id, account_id, amount):
-        transaction = Transaction(transaction_date, portfolio_id, account_id)
-        cash_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=amount,
-            amount_original_currency=amount,
-            movement_type=MovementType.INTEREST,
-            transaction_number=transaction.transaction_number
-        )
-        transaction.add_cash_movement(cash_movement)
-        return transaction
-
-    def dividend_template1(self, transaction_date, portfolio_id, account_id, amount):
         transaction = Transaction(transaction_date, portfolio_id, account_id)
         cash_movement = CashMovement(
             transaction=transaction,
@@ -1095,38 +942,20 @@ class TransactionManager:
     def generate_report(self, transaction, portfolio, product_collection):
         return transaction.generate_report(portfolio, product_collection)
 
-    def execute_transaction1(self, transaction, portfolio, product_collection):
-        messages = transaction.execute(portfolio, product_collection)
-        if not any("successfully executed" in msg for msg in messages):
-            logging.error("Transaction validation messages: %s", messages)
-            return messages
-        self.record_transaction(transaction)
-        return messages
-
-    def record_transaction1(self, transaction):
-        self.transaction_history.append(transaction)
-        logging.info("Transaction recorded: %s", transaction.transaction_number)
-
-    def generate_report1(self, transaction, portfolio, product_collection):
-        return transaction.generate_report(portfolio, product_collection)
-
-    def create_and_execute_transaction1(self, transaction_date, portfolio_id, template, account_id, portfolio, product_collection, **kwargs):
-        transaction = self.create_transaction(transaction_date, portfolio_id, template, account_id, **kwargs)
-        return self.execute_transaction(transaction, portfolio, product_collection)
-
     def create_and_execute_transaction(self, transaction_date, portfolio_id, template, account_id, portfolio, product_collection, **kwargs):
-        transaction = self.create_transaction(transaction_date, portfolio_id, template, account_id, product_collection, **kwargs)
+        transaction = self.create_transaction(transaction_date, portfolio_id, template, account_id, portfolio, product_collection, **kwargs)
         return self.execute_transaction(transaction, portfolio, product_collection)
 
 class Transaction:
     transaction_counter = 0
 
-    def __init__(self, transaction_date, portfolio_id, account_id):
+    def __init__(self, transaction_date, portfolio_id, account_id, transaction_currency):
         Transaction.transaction_counter += 1
         self.transaction_number = Transaction.transaction_counter
         self.transaction_date = transaction_date
         self.portfolio_id = portfolio_id
         self.account_id = account_id
+        self.transaction_currency = transaction_currency  # Added this line
         self.cash_movements = []
         self.security_movements = []
         logging.info("Transaction %s created on %s", self.transaction_number, self.transaction_date)
@@ -1151,8 +980,8 @@ class Transaction:
             messages.append("The client does not exist.")
 
         for movement in self.cash_movements:
-            if not portfolio.search_account_id(movement.cash_account_id):
-                messages.append(f"The account {movement.cash_account_id} does not exist.")
+            if not portfolio.search_account_id(movement.cash_account_id, currency=self.transaction_currency):
+                messages.append(f"The account {movement.cash_account_id} in {self.transaction_currency} does not exist.")
             if movement.exchange_rate <= 0:
                 messages.append(f"Invalid exchange rate for cash movement: {movement.exchange_rate}")
 
@@ -1170,9 +999,19 @@ class Transaction:
             if movement.amount_nominal % product.smallest_trading_unit != 0:
                 messages.append(f"The transaction amount for product {movement.product_id} is not a multiple of the smallest trading unit.")
 
+            # Check if the transaction date is within the product's start and end dates
+            if hasattr(product, 'start_date') and hasattr(product, 'maturity_date'):
+                if not (product.start_date <= self.transaction_date <= product.maturity_date):
+                    messages.append(f"The transaction date for product {movement.product_id} is outside the valid date range ({product.start_date} to {product.maturity_date}).")
+
             if movement.movement_type == MovementType.SECURITY_BUY:
-                cash_account = portfolio.search_account_id(movement.account_id)
+                cash_account = portfolio.search_account_id(movement.account_id, currency=self.transaction_currency)
                 cost = movement.amount_nominal * movement.price
+                if portfolio.cost_in_transaction_currency:
+                    cost += movement.price * movement.amount_nominal
+                else:
+                    # Omgerekende kosten in standaardvaluta
+                    cost += movement.price * movement.amount_nominal * movement.exchange_rate
                 if cash_account.balance < cost:
                     messages.append("Insufficient balance for the purchase.")
             elif movement.movement_type == MovementType.SECURITY_SELL:
