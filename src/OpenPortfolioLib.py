@@ -1119,7 +1119,8 @@ class Transaction:
 
         if not sufficient_funds:
             logging.error(f"Validation failed with messages: {messages}")
-            return False, messages
+            raise ValueError("Insufficient balance")  # Zorg ervoor dat deze uitzondering wordt opgegooid
+
 
         logging.debug("Validation successful")
         return True, ["Transaction is valid."]

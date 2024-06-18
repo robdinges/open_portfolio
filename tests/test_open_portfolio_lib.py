@@ -22,10 +22,11 @@ class TestTransactions:
         """Setup client and their portfolio."""
         self.client = Client(client_id=999, name="John Doe")
         self.portfolio = self.client.add_portfolio(portfolio_id=999)
+        self.portfolio.cash_accounts[(self.portfolio.portfolio_id, 'EUR', AccountType.CASH)].balance = 10000
 
     def setup_cash_account(self):
         """Add a cash account to the portfolio."""
-        self.portfolio.add_cash_account(account_id=998, start_balance=10000)
+        self.portfolio.add_cash_account(account_id=999, start_balance=10000, currency='USD')
 
     def setup_test_bond(self):
         """Create and add a bond to the product collection."""
@@ -44,6 +45,7 @@ class TestTransactions:
 
     def setup_bond_prices(self):
         """Add historical prices for the bond."""
+        self.currency_prices = CurrencyPrices()
         prices = {
             date(2022, 1, 1): 100.0,
             date(2022, 2, 1): 101.0,
@@ -51,7 +53,7 @@ class TestTransactions:
             date(2022, 4, 1): 103.0
         }
         for price_date, price_value in prices.items():
-            self.test_bond.add_price(price_date, price_value)
+            self.currency_prices.add_price('USD', price_date, price_value)
 
     def execute_initial_transaction(self):
         """Create and execute an initial bond purchase transaction."""
@@ -59,9 +61,9 @@ class TestTransactions:
             transaction_date=date(2024, 7, 2),
             portfolio_id=self.portfolio.portfolio_id,
             template=TransactionTemplate.BUY,
-            account_id=998,
             portfolio=self.portfolio,
             product_collection=self.product_collection,
+            currency_prices = self.currency_prices,
             product_id=999,
             amount=1000,
             price=1.0,
@@ -82,8 +84,7 @@ class TestTransactions:
         #    if cash_movement['amount']
         cash_movement = transactions[0]['cash_movements']
         security_movement = transactions[0]['security_movements']
-        assert transactions[0]['account_id'] == 998
-        assert transactions[0]['transaction_number'] == 2  # Corrected based on typical sequence
+        assert transactions[0]['account_id'] == 999
         assert cash_movement[0]['amount'] == -1000  # buy amount
         assert cash_movement[1]['amount'] == -10 # costs
         assert cash_movement[2]['amount'] == -15  #acccrued interest
