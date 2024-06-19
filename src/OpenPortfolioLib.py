@@ -997,7 +997,6 @@ class TransactionManager:
         transaction = self.create_transaction(transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs)
         return self.execute_transaction(transaction, portfolio, product_collection)
 
-
 class Transaction:
     transaction_counter = 0
     def __init__(self, transaction_date, portfolio_id, account_id, transaction_currency):
@@ -1119,11 +1118,11 @@ class Transaction:
 
         if not sufficient_funds:
             logging.error(f"Validation failed with messages: {messages}")
-            raise ValueError("Insufficient balance")  # Zorg ervoor dat deze uitzondering wordt opgegooid
+            #raise ValueError("Insufficient balance")  # Zorg ervoor dat deze uitzondering wordt opgegooid
 
 
         logging.debug("Validation successful")
-        return True, ["Transaction is valid."]
+        return sufficient_funds, ["Transaction is valid or not."]  #tbd
 
 # price classes
 
