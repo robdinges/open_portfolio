@@ -195,11 +195,43 @@ class Portfolio:
         account_key = (account_id, currency, account_type)
         return self.cash_accounts.get(account_key)
 
-    def get_account_by_currency(self, currency, account_type=AccountType.CASH):
+    def get_account_by_currency1(self, currency, account_type=AccountType.CASH):
         for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
             if acc_currency == currency and acc_type == account_type:
                 return account_id
         raise ValueError(f"No account found for currency {currency} and type {account_type}")
+    
+    def get_account_by_currency2(self, currency, account_type=AccountType.CASH):
+        for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
+            if acc_currency == currency and acc_type == account_type:
+                return account_id
+        # Als geen rekening is gevonden in de gevraagde valuta, gebruik dan de default currency van de portfolio
+        default_account_id = self.search_account_id_by_currency(self.default_currency, account_type)
+        if default_account_id:
+            return default_account_id
+        raise ValueError(f"No account found for currency {currency} and type {account_type}, and no default account available.")
+    
+    def get_account_by_currency(self, currency, account_type=AccountType.CASH):
+        for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
+            if acc_currency == currency and acc_type == account_type:
+                return account
+        # Als geen rekening is gevonden in de gevraagde valuta, gebruik dan de default currency van de portfolio
+        default_account = self.search_account_id_by_currency(self.default_currency, account_type)
+        if default_account:
+            return default_account
+        raise ValueError(f"No account found for currency {currency} and type {account_type}")
+        
+    def search_account_id_by_currency1(self, currency, account_type=AccountType.CASH):
+        for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
+            if acc_currency == currency and acc_type == account_type:
+                return account_id
+        return None
+
+    def search_account_id_by_currency(self, currency, account_type=AccountType.CASH):
+        for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
+            if acc_currency == currency and acc_type == account_type:
+                return account
+        return None
     
     def execute_transaction(self, transaction, product_collection):
         is_valid, messages = transaction.validate_transaction(self, product_collection)
@@ -976,7 +1008,7 @@ class TransactionManager:
     def generate_report(self, transaction, portfolio, product_collection):
         return transaction.generate_report(portfolio, product_collection)
 
-    def create_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
+    def create_transaction1(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
         if template not in self.templates:
             raise ValueError(f"Unknown template: {template}")
         
@@ -992,6 +1024,30 @@ class TransactionManager:
         kwargs['exchange_rate'] = exchange_rate
 
         return self.templates[template](transaction_date, portfolio_id, portfolio.get_account_by_currency(transaction_currency), portfolio, product_collection, **kwargs)
+
+    def create_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
+        if template not in self.templates:
+            raise ValueError(f"Unknown template: {template}")
+        
+        product_id = kwargs.get('product_id')
+        product = product_collection.search_product_id(product_id)
+        if not product:
+            raise ValueError(f"Product with ID {product_id} not found")
+
+        # Get the exchange rate and correct account_id
+        transaction_currency = product.issue_currency
+        exchange_rate = currency_prices.get_latest_price(transaction_currency, portfolio.default_currency) if transaction_currency != portfolio.default_currency else 1.0
+        
+        try:
+            account_id = portfolio.get_account_by_currency(transaction_currency)
+        except ValueError:
+            # Als er geen rekening in de gevraagde valuta is, gebruik dan de default currency rekening
+            account_id = portfolio.get_account_by_currency(portfolio.default_currency)
+            exchange_rate = 1 / currency_prices.get_latest_price(portfolio.default_currency, transaction_currency)
+        
+        kwargs['exchange_rate'] = exchange_rate
+
+        return self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, **kwargs)
 
     def create_and_execute_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
         transaction = self.create_transaction(transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs)
@@ -1052,7 +1108,7 @@ class Transaction:
             self.security_movements.append(security_movement)
             logging.info("Added security movement to transaction %s: %s", self.transaction_number, security_movement)
 
-    def validate_transaction(self, portfolio, product_collection):
+    def validate_transaction1(self, portfolio, product_collection):
         messages = []
         sufficient_funds = True
 
@@ -1123,6 +1179,174 @@ class Transaction:
 
         logging.debug("Validation successful")
         return sufficient_funds, ["Transaction is valid or not."]  #tbd
+
+    def validate_transaction2(self, portfolio, product_collection):
+        messages = []
+        sufficient_funds = True
+
+        if not portfolio:
+            messages.append("The portfolio does not exist.")
+            sufficient_funds = False
+
+        if not portfolio.client_id:
+            messages.append("The client does not exist.")
+            sufficient_funds = False
+
+        # Totaalbedrag in de rekeningvaluta
+        total_cost_per_currency = {}
+
+        for movement in self.cash_movements:
+            logging.debug(f"Validating cash movement for account {movement.cash_account_id} in {movement.transaction_currency}")
+            cash_account = portfolio.search_account_id(movement.cash_account_id, currency=movement.transaction_currency)
+            if cash_account is None:
+                messages.append(f"The account {movement.cash_account_id} in {movement.transaction_currency} does not exist.")
+                sufficient_funds = False
+                continue
+
+            if movement.exchange_rate <= 0:
+                messages.append(f"Invalid exchange rate for cash movement: {movement.exchange_rate}")
+                sufficient_funds = False
+                continue
+
+            # Bereken het bedrag in de rekeningvaluta
+            cost_in_account_currency = movement.amount_account_currency if movement.transaction_currency == cash_account.currency else movement.amount_account_currency * movement.exchange_rate
+            cost_in_account_currency = -cost_in_account_currency
+
+            if movement.transaction_currency not in total_cost_per_currency:
+                total_cost_per_currency[movement.transaction_currency] = 0
+            total_cost_per_currency[movement.transaction_currency] += cost_in_account_currency
+
+        # Controleer of het totale bedrag per valuta binnen het saldo past
+        for currency, total_cost in total_cost_per_currency.items():
+            cash_account = portfolio.search_account_id_by_currency(currency)
+            if cash_account is None:
+                messages.append(f"No account found for currency {currency} and type {AccountType.CASH}.")
+                sufficient_funds = False
+                continue
+
+            if cash_account.balance < total_cost:
+                messages.append(f"Insufficient balance for the total transaction amount in {currency}. Account balance: {cash_account.balance}, Required: {total_cost}")
+                sufficient_funds = False
+
+        for movement in self.security_movements:
+            logging.debug(f"Validating security movement for product {movement.product_id}")
+            product = product_collection.search_product_id(movement.product_id)
+            if not product:
+                messages.append(f"The product {movement.product_id} does not exist.")
+                sufficient_funds = False
+                continue
+
+            if movement.amount_nominal * movement.price < product.minimum_purchase_value:
+                messages.append(f"The transaction value for product {movement.product_id} does not meet the minimum purchase value.")
+                sufficient_funds = False
+
+            if movement.amount_nominal % product.smallest_trading_unit != 0:
+                messages.append(f"The transaction amount for product {movement.product_id} is not a multiple of the smallest trading unit.")
+                sufficient_funds = False
+
+            if hasattr(product, 'start_date') and hasattr(product, 'maturity_date'):
+                if not (product.start_date <= self.transaction_date <= product.maturity_date):
+                    messages.append(f"The transaction date for product {movement.product_id} is outside the valid date range ({product.start_date} to {product.maturity_date}).")
+                    sufficient_funds = False
+
+            total_holding = sum(
+                h['amount'] for h in portfolio.securities_account.holdings
+                if h['product'].instrument_id == movement.product_id
+            )
+            if movement.movement_type == MovementType.SECURITY_SELL and total_holding < movement.amount_nominal:
+                messages.append(f"Insufficient holdings for product {movement.product_id}.")
+                sufficient_funds = False
+
+        if not sufficient_funds:
+            logging.error(f"Validation failed with messages: {messages}")
+            # raise ValueError("Insufficient balance")  # Zorg ervoor dat deze uitzondering wordt opgegooid
+
+        logging.debug("Validation successful")
+        return sufficient_funds, ["Transaction is valid or not."]  # tbd
+
+    def validate_transaction(self, portfolio, product_collection):
+        messages = []
+        sufficient_funds = True
+
+        if not portfolio:
+            messages.append("The portfolio does not exist.")
+            sufficient_funds = False
+
+        if not portfolio.client_id:
+            messages.append("The client does not exist.")
+            sufficient_funds = False
+
+        # Totaalbedrag in de rekeningvaluta
+        total_cost_per_currency = {}
+
+        for movement in self.cash_movements:
+            logging.debug(f"Validating cash movement for account {movement.cash_account_id} in {movement.transaction_currency}")
+            cash_account = portfolio.get_account_by_currency(movement.transaction_currency)
+            if cash_account is None:
+                messages.append(f"The account for currency {movement.transaction_currency} does not exist.")
+                sufficient_funds = False
+                continue
+
+            if movement.exchange_rate <= 0:
+                messages.append(f"Invalid exchange rate for cash movement: {movement.exchange_rate}")
+                sufficient_funds = False
+                continue
+
+            # Bereken het bedrag in de rekeningvaluta
+            cost_in_account_currency = movement.amount_account_currency if movement.transaction_currency == cash_account.currency else movement.amount_account_currency * movement.exchange_rate
+            cost_in_account_currency = -cost_in_account_currency
+
+            if movement.transaction_currency not in total_cost_per_currency:
+                total_cost_per_currency[movement.transaction_currency] = 0
+            total_cost_per_currency[movement.transaction_currency] += cost_in_account_currency
+
+        # Controleer of het totale bedrag per valuta binnen het saldo past
+        for currency, total_cost in total_cost_per_currency.items():
+            cash_account = portfolio.get_account_by_currency(currency)
+            if cash_account is None:
+                messages.append(f"No account found for currency {currency} and type {AccountType.CASH}.")
+                sufficient_funds = False
+                continue
+
+            if cash_account.balance < total_cost:
+                messages.append(f"Insufficient balance for the total transaction amount in {currency}. Account balance: {cash_account.balance}, Required: {total_cost}")
+                sufficient_funds = False
+
+        for movement in self.security_movements:
+            logging.debug(f"Validating security movement for product {movement.product_id}")
+            product = product_collection.search_product_id(movement.product_id)
+            if not product:
+                messages.append(f"The product {movement.product_id} does not exist.")
+                sufficient_funds = False
+                continue
+
+            if movement.amount_nominal * movement.price < product.minimum_purchase_value:
+                messages.append(f"The transaction value for product {movement.product_id} does not meet the minimum purchase value.")
+                sufficient_funds = False
+
+            if movement.amount_nominal % product.smallest_trading_unit != 0:
+                messages.append(f"The transaction amount for product {movement.product_id} is not a multiple of the smallest trading unit.")
+                sufficient_funds = False
+
+            if hasattr(product, 'start_date') and hasattr(product, 'maturity_date'):
+                if not (product.start_date <= self.transaction_date <= product.maturity_date):
+                    messages.append(f"The transaction date for product {movement.product_id} is outside the valid date range ({product.start_date} to {product.maturity_date}).")
+                    sufficient_funds = False
+
+            total_holding = sum(
+                h['amount'] for h in portfolio.securities_account.holdings
+                if h['product'].instrument_id == movement.product_id
+            )
+            if movement.movement_type == MovementType.SECURITY_SELL and total_holding < movement.amount_nominal:
+                messages.append(f"Insufficient holdings for product {movement.product_id}.")
+                sufficient_funds = False
+
+        if not sufficient_funds:
+            logging.error(f"Validation failed with messages: {messages}")
+            # raise ValueError("Insufficient balance")  # Zorg ervoor dat deze uitzondering wordt opgegooid
+
+        logging.debug("Validation successful")
+        return sufficient_funds, ["Transaction is valid or not."]  # tbd
 
 # price classes
 
