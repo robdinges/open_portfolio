@@ -269,54 +269,15 @@ class Portfolio:
         for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
             if acc_currency == currency and acc_type == account_type:
                 return account
-        # Gebruik de default currency als geen specifieke valuta-rekening wordt gevonden
-        for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
-            if acc_currency == self.default_currency and acc_type == account_type:
-                return account
+        
+        # If not found, raise an error
+        raise ValueError(f"No account found for currency {currency} and type {account_type} in portfolio {self.portfolio_id}")
 
     def search_account_id_by_currency(self, currency, account_type=AccountType.CASH) -> Optional[CashAccount]:
         for (account_id, acc_currency, acc_type), account in self.cash_accounts.items():
             if acc_currency == currency and acc_type == account_type:
                 return account
         return None
-
-    def execute_transaction1(self, transaction, product_collection):
-        is_valid, messages = transaction.validate_transaction(self, product_collection)
-        if not is_valid:
-            for message in messages:
-                logging.error(message)
-            return messages
-
-        # Process security movements
-        for movement in transaction.security_movements:
-            product = product_collection.search_product_id(movement.product_id)
-            if product:
-                existing_holding = next((h for h in self.securities_account.holdings if h['product'].instrument_id == product.instrument_id), None)
-                if existing_holding:
-                    existing_holding['amount'] += movement.amount_nominal
-                else:
-                    self.securities_account.holdings.append({
-                        'product': product,
-                        'amount': movement.amount_nominal
-                    })
-                product.add_transaction(transaction)
-
-        # Process cash movements
-        for movement in transaction.cash_movements:
-            account = self.search_account_id(movement.cash_account_id, currency=movement.transaction_currency, account_type=AccountType.CASH)
-            if account:
-                logging.info("Before updating balance: %s", account.balance)
-                account.balance += movement.amount_account_currency
-                logging.info("After updating balance: %s", account.balance)
-            else:
-                raise ValueError(f"Cash account {movement.cash_account_id} not found.")
-
-        for account in self.cash_accounts.values():
-            if transaction not in account.transactions:
-                account.add_transaction(transaction)
-
-        logging.info("Transaction executed: %s", transaction.transaction_number)
-        return [f"Transaction {transaction.transaction_number} successfully executed."]
 
     def execute_transaction(self, transaction, product_collection):
         transaction.convert_cash_account_ids_to_int()  # Ensure cash_account_id is an integer before execution
@@ -463,8 +424,7 @@ class Portfolio:
                         'date': transaction.transaction_date,
                         'cash_movements': [],
                         'security_movements': [],
-                        #'account_id': account.cash_account_id,
-                        'account_id': 'account.cash_account_id',
+                        'account_id': account.cash_account_id,
                         'portfolio_id': self.portfolio_id,
                         'account_type': account.account_type.name,
                     }
@@ -488,9 +448,9 @@ class Portfolio:
                         'date': transaction.transaction_date,
                         'cash_movements': [],
                         'security_movements': [],
-                        'account_id': transaction.account_id.cash_account_id,
+                        'account_id': 'securities',
                         'portfolio_id': self.portfolio_id,
-                        'account_type': AccountType.SECURITIES.name,
+                        'account_type': 'SECURITIES',
                     }
                     transactions.append(transaction_data)
 
@@ -502,15 +462,6 @@ class Portfolio:
                             'amount_nominal': security_movement.amount_nominal,
                             'price': security_movement.price,
                             'product_id': security_movement.product_id,
-                        })
-
-                for cash_movement in transaction.cash_movements:
-                    if not any(cm['amount'] == cash_movement.amount_account_currency and cm['movement_type'] == cash_movement.movement_type for cm in transaction_data['cash_movements']):
-                        logging.info("Adding cash movement from securities account: %s, %s", cash_movement.amount_account_currency, cash_movement.movement_type)
-                        transaction_data['cash_movements'].append({
-                            'movement_type': cash_movement.movement_type,
-                            'amount': cash_movement.amount_account_currency,
-                            'original_amount': cash_movement.amount_original_currency,
                         })
 
         transactions.sort(key=lambda x: x['date'])
@@ -864,68 +815,6 @@ class TransactionManager:
         # For example, let's assume a flat fee of 1% of the transaction value
         return 0.01 * amount * price
 
-    def buy_template1(self, transaction_date, portfolio_id, account_id: int, portfolio, product_collection, product_id, amount, price, cost=None, exchange_rate=1.0):
-        if cost is None:
-            cost = self.calculate_cost(TransactionTemplate.BUY, amount, price)
-
-        product = product_collection.search_product_id(product_id)
-        if product is None:
-            logging.error("Product with ID %s not found", product_id)
-            return None
-
-        transaction = Transaction(transaction_date, portfolio_id, account_id, portfolio.default_currency)
-        security_movement = SecurityMovement(
-            transaction=transaction,
-            product_id=product_id,
-            amount_nominal=amount,
-            price=price,
-            movement_type=MovementType.SECURITY_BUY
-        )
-        transaction.add_security_movement(security_movement)
-
-        total_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=-amount * price,
-            amount_original_currency=-amount * price * exchange_rate,
-            movement_type=MovementType.SECURITY_BUY,
-            transaction_number=transaction.transaction_number,
-            transaction_currency=product.issue_currency,  # Set correct currency
-            exchange_rate=exchange_rate
-        )
-        total_movement.cash_account_id = account_id  # Ensure this is an integer ID
-        transaction.add_cash_movement(total_movement)
-
-        cost_movement = CashMovement(
-            transaction=transaction,
-            amount_account_currency=-cost,
-            amount_original_currency=-cost * exchange_rate,
-            movement_type=MovementType.COSTS,
-            transaction_number=transaction.transaction_number,
-            transaction_currency=product.issue_currency,  # Set correct currency
-            exchange_rate=exchange_rate
-        )
-        cost_movement.cash_account_id = account_id  # Ensure this is an integer ID
-        transaction.add_cash_movement(cost_movement)
-
-        if isinstance(product, Bond):
-            time_travel = TimeTravel()
-            accrued_interest = product.calculate_accrued_interest(amount, time_travel, transaction_date)
-
-            ai_movement = CashMovement(
-                transaction=transaction,
-                amount_account_currency=-accrued_interest,
-                amount_original_currency=-accrued_interest * exchange_rate,
-                movement_type=MovementType.ACCRUED_INTEREST,
-                transaction_number=transaction.transaction_number,
-                transaction_currency=product.issue_currency,  # Set correct currency
-                exchange_rate=exchange_rate
-            )
-            ai_movement.cash_account_id = account_id  # Ensure this is an integer ID
-            transaction.add_cash_movement(ai_movement)
-
-        logging.info("Created buy transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
-        return transaction
-
     def buy_template(self, transaction_date, portfolio_id, account_id, portfolio, product_collection, product_id, amount, price, cost=None, exchange_rate=1.0):
         if cost is None:
             cost = self.calculate_cost(TransactionTemplate.BUY, amount, price)
@@ -1067,12 +956,12 @@ class TransactionManager:
         return transaction
 
     def execute_transaction(self, transaction, portfolio, product_collection):
+        logging.debug("Executing transaction...")
         is_valid, messages = transaction.validate_transaction(portfolio, product_collection)
         if not is_valid:
             logging.error(f"Transaction validation failed with messages: {messages}")
             return messages
 
-        # If valid, execute the transaction
         for movement in transaction.security_movements:
             product = product_collection.search_product_id(movement.product_id)
             if product:
@@ -1085,15 +974,25 @@ class TransactionManager:
                         'amount': movement.amount_nominal
                     })
                 product.add_transaction(transaction)
+            logging.debug(f"Processed security movement for product {movement.product_id}")
 
         for movement in transaction.cash_movements:
-            account = portfolio.search_account_id(movement.cash_account_id, currency=movement.transaction_currency)
+            account = None
+            if movement.cash_account_id == transaction.account_id:
+                try:
+                    account = portfolio.search_account_id(transaction.account_id)
+                except ValueError:
+                    account = portfolio.search_account_id(portfolio.default_currency)
             if account:
                 account.balance += movement.amount_account_currency
+                logging.debug(f"Updated balance for account {account.cash_account_id}: {account.balance}")
+            else:
+                logging.error(f"Cash account {movement.cash_account_id} not found in portfolio {portfolio.portfolio_id}.")
+                raise ValueError(f"Cash account {movement.cash_account_id} not found in portfolio {portfolio.portfolio_id}.")
 
-        account = portfolio.search_account_id(transaction.account_id)
-        if account and transaction not in account.transactions:
-            account.add_transaction(transaction)
+        for account in portfolio.cash_accounts.values():
+            if transaction not in account.transactions:
+                account.add_transaction(transaction)
 
         logging.info("Transaction executed: %s", transaction.transaction_number)
         return [f"Transaction {transaction.transaction_number} successfully executed."]
@@ -1106,28 +1005,43 @@ class TransactionManager:
         return transaction.generate_report(portfolio, product_collection)
 
     def create_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
+        logging.debug("Creating transaction...")
+        
         if template not in self.templates:
             raise ValueError(f"Unknown template: {template}")
-        
+
         product_id = kwargs.get('product_id')
         product = product_collection.search_product_id(product_id)
         if not product:
             raise ValueError(f"Product with ID {product_id} not found")
 
-        # Get the exchange rate and correct account_id
         transaction_currency = product.issue_currency
-        exchange_rate = currency_prices.get_latest_price(transaction_currency, portfolio.default_currency) if transaction_currency != portfolio.default_currency else 1.0
-        
+        logging.debug(f"Transaction currency: {transaction_currency}")
+
         try:
-            account_id = portfolio.get_account_by_currency(transaction_currency)
+            account = portfolio.get_account_by_currency(transaction_currency)
+            exchange_rate = 1.0
+            logging.debug(f"Found account in transaction currency: {account.cash_account_id}")
         except ValueError:
-            # Als er geen rekening in de gevraagde valuta is, gebruik dan de default currency rekening
-            account_id = portfolio.get_account_by_currency(portfolio.default_currency)
-            exchange_rate = 1 / currency_prices.get_latest_price(portfolio.default_currency, transaction_currency)
-        
+            account = portfolio.get_account_by_currency(portfolio.default_currency)
+            logging.debug(f"Using default currency account: {account.cash_account_id}")
+            try:
+                exchange_rate = 1 / currency_prices.get_latest_price(transaction_currency, portfolio.default_currency)
+            except ValueError:
+                exchange_rate = currency_prices.get_latest_price(portfolio.default_currency, transaction_currency)
+            logging.debug(f"Exchange rate: {exchange_rate}")
+
+        account_id = account.cash_account_id
         kwargs['exchange_rate'] = exchange_rate
 
-        return self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, **kwargs)
+        transaction = self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, **kwargs)
+        
+        # Ensure the transaction is unique for each portfolio
+        transaction.portfolio_id = portfolio_id
+        transaction.account_id = account_id
+        logging.debug(f"Created transaction {transaction.transaction_number} with account_id {account_id}")
+
+        return transaction
 
     def create_and_execute_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
         transaction = self.create_transaction(transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs)
@@ -1150,38 +1064,6 @@ class Transaction:
         for movement in self.cash_movements:
             if isinstance(movement.cash_account_id, CashAccount):
                 movement.cash_account_id = movement.cash_account_id.cash_account_id
-
-    def execute1(self, portfolio, product_collection):
-        is_valid, messages = self.validate_transaction(portfolio, product_collection)
-        if not is_valid:
-            for message in messages:
-                logging.error(message)
-            return messages
-
-        for movement in self.security_movements:
-            product = product_collection.search_product_id(movement.product_id)
-            if product:
-                existing_holding = next((h for h in portfolio.securities_account.holdings if h['product'].instrument_id == product.instrument_id), None)
-                if existing_holding:
-                    existing_holding['amount'] += movement.amount_nominal
-                else:
-                    portfolio.securities_account.holdings.append({
-                        'product': product,
-                        'amount': movement.amount_nominal
-                    })
-                product.add_transaction(self)
-
-        for movement in self.cash_movements:
-            account = portfolio.search_account_id(movement.cash_account_id, currency=movement.transaction_currency, account_type=AccountType.CASH)
-            if account:
-                account.balance += movement.amount_account_currency
-
-        account = portfolio.search_account_id(self.account_id, currency=self.transaction_currency, account_type=AccountType.CASH)
-        if account and self not in account.transactions:
-            account.add_transaction(self)
-
-        logging.info("Transaction executed: %s", self.transaction_number)
-        return [f"Transaction {self.transaction_number} successfully executed."]
 
     def execute(self, portfolio, product_collection):
         self.convert_cash_account_ids_to_int()  # Ensure cash_account_id is an integer before execution
@@ -1217,16 +1099,6 @@ class Transaction:
         logging.info("Transaction executed: %s", self.transaction_number)
         return [f"Transaction {self.transaction_number} successfully executed."]
 
-    def add_cash_movement1(self, cash_movement):
-        if cash_movement not in self.cash_movements:
-            self.cash_movements.append(cash_movement)
-            logging.info("Added cash movement to transaction %s: %s at exchange rate %s", self.transaction_number, cash_movement, cash_movement.exchange_rate)
-
-    def add_security_movement1(self, security_movement):
-        if security_movement not in self.security_movements:
-            self.security_movements.append(security_movement)
-            logging.info("Added security movement to transaction %s: %s", self.transaction_number, security_movement)
-
     def add_cash_movement(self, cash_movement):
         if cash_movement not in self.cash_movements:
             self.cash_movements.append(cash_movement)
@@ -1238,6 +1110,7 @@ class Transaction:
             logging.info("Added security movement to transaction %s: %s", self.transaction_number, security_movement)
 
     def validate_transaction(self, portfolio, product_collection):
+        logging.debug("Validating transaction...")
         messages = []
         sufficient_funds = True
 
@@ -1255,10 +1128,17 @@ class Transaction:
             logging.debug(f"Validating cash movement for account {movement.cash_account_id} in {movement.transaction_currency}")
             try:
                 cash_account = portfolio.get_account_by_currency(movement.transaction_currency)
-            except ValueError as e:
-                messages.append(str(e))
-                sufficient_funds = False
-                continue
+                logging.debug(f"Found cash account {cash_account.cash_account_id} in currency {movement.transaction_currency}")
+            except ValueError:
+                try:
+                    cash_account = portfolio.get_account_by_currency(portfolio.default_currency)
+                    exchange_rate = 1 / movement.exchange_rate if movement.transaction_currency != portfolio.default_currency else 1.0
+                    movement.amount_account_currency *= exchange_rate
+                    logging.debug(f"Using default currency account {cash_account.cash_account_id} with exchange rate {exchange_rate}")
+                except ValueError as e:
+                    messages.append(str(e))
+                    sufficient_funds = False
+                    continue
 
             if movement.exchange_rate <= 0:
                 messages.append(f"Invalid exchange rate for cash movement: {movement.exchange_rate}")
@@ -1275,10 +1155,15 @@ class Transaction:
         for currency, total_cost in total_cost_per_currency.items():
             try:
                 cash_account = portfolio.get_account_by_currency(currency)
-            except ValueError as e:
-                messages.append(str(e))
-                sufficient_funds = False
-                continue
+                logging.debug(f"Validating total cost in currency {currency} for account {cash_account.cash_account_id}")
+            except ValueError:
+                try:
+                    cash_account = portfolio.get_account_by_currency(portfolio.default_currency)
+                    logging.debug(f"Using default currency account {cash_account.cash_account_id} for total cost validation")
+                except ValueError as e:
+                    messages.append(str(e))
+                    sufficient_funds = False
+                    continue
 
             if cash_account.balance < total_cost:
                 messages.append(f"Insufficient balance for the total transaction amount in {currency}. Account balance: {cash_account.balance}, Required: {total_cost}")
@@ -1313,9 +1198,6 @@ class Transaction:
                 messages.append(f"Insufficient holdings for product {movement.product_id}.")
                 sufficient_funds = False
 
-        #if not sufficient_funds:
-        #    logging.error(f"Validation failed with messages: {messages}")
-
         logging.debug("Validation successful")
         return sufficient_funds, messages
 
@@ -1336,8 +1218,12 @@ class CurrencyPrices:
     def get_latest_price(self, currency_id: str, counter_currency: str = DEFAULT_CURRENCY):
         prices = [price for price in self.prices if price[0] == currency_id and price[3] == counter_currency]
         if not prices:
-            raise ValueError(f"No exchange rate available for {currency_id} to {counter_currency}")
-        return max(prices, key=lambda x: x[1])[2]  # Return the latest price
+            # Try to find the reverse exchange rate
+            reverse_prices = [price for price in self.prices if price[0] == counter_currency and price[3] == currency_id]
+            if not reverse_prices:
+                raise ValueError(f"No exchange rate available for {currency_id} to {counter_currency} or {counter_currency} to {currency_id}")
+            return 1 / max(reverse_prices, key=lambda x: x[1])[2]
+        return max(prices, key=lambda x: x[1])[2]
 
     def show_prices(self, currency_id: str, start_date: date = date.today(), end_date: date = date(2099, 12, 31), counter_currency: str = DEFAULT_CURRENCY):
         filtered_prices = [
