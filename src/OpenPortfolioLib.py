@@ -406,7 +406,7 @@ class Portfolio:
 
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
-    def list_all_transactions(self):
+    def list_all_transactions1(self):
         transactions = []
 
         def find_transaction_data(transaction_number):
@@ -441,14 +441,15 @@ class Portfolio:
 
         for holding in self.securities_account.holdings:
             for transaction in holding['product'].transactions:
-                transaction_data = find_transaction_data(transaction.transaction_number)
+                transaction_data = find_transaction_data(transaction.transaction_number) #tweede keer voorzelfde tx
                 if transaction_data is None:
                     transaction_data = {
                         'transaction_number': transaction.transaction_number,
                         'date': transaction.transaction_date,
                         'cash_movements': [],
                         'security_movements': [],
-                        'account_id': 'securities',
+                        #'account_id': 'securities',
+                        'account_id': account.cash_account_id,
                         'portfolio_id': self.portfolio_id,
                         'account_type': 'SECURITIES',
                     }
@@ -467,7 +468,42 @@ class Portfolio:
         transactions.sort(key=lambda x: x['date'])
         return transactions
 
-    def transactions_table(self):
+    def list_all_transactions(self):
+        transactions = {}
+
+        # Collect all transactions from cash accounts
+        for account in self.cash_accounts.values():
+            for transaction in account.transactions:
+                if transaction.transaction_number not in transactions:
+                    transactions[transaction.transaction_number] = {
+                        'transaction': transaction,
+                        'cash_movements': [],
+                        'security_movements': []
+                    }
+                transactions[transaction.transaction_number]['cash_movements'].extend(
+                    [cm for cm in transaction.cash_movements if cm not in transactions[transaction.transaction_number]['cash_movements']]
+                )
+
+        # Collect all transactions from securities account
+        for holding in self.securities_account.holdings:
+            for transaction in holding['product'].transactions:
+                if transaction.transaction_number not in transactions:
+                    transactions[transaction.transaction_number] = {
+                        'transaction': transaction,
+                        'cash_movements': [],
+                        'security_movements': []
+                    }
+                transactions[transaction.transaction_number]['security_movements'].extend(
+                    [sm for sm in transaction.security_movements if sm not in transactions[transaction.transaction_number]['security_movements']]
+                )
+
+        # Convert to list and sort by transaction date
+        unique_transactions = list(transactions.values())
+        unique_transactions.sort(key=lambda x: x['transaction'].transaction_date)
+
+        return unique_transactions    
+
+    def transactions_table1(self):
         """
         tbd
         """
@@ -513,6 +549,56 @@ class Portfolio:
                     account_type
                 ]
                 table_data.append(row)
+
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    def transactions_table(self):
+        transactions = self.list_all_transactions()
+
+        headers = [
+            "Transaction Number", "Date", "Movement Type", "Amount", "Original Amount",
+            "Account ID", "Portfolio ID", "Amount Nominal", "Price", "Product ID", "Account Type"
+        ]
+        table_data = []
+
+        for txn_data in transactions:
+            transaction = txn_data['transaction']
+            transaction_number = transaction.transaction_number
+            transaction_date = transaction.transaction_date
+
+            # Process cash movements
+            for cm in txn_data['cash_movements']:
+                account = self.search_account_id(cm.cash_account_id)
+                account_type = account.account_type.name if account else "UNKNOWN"
+                table_data.append([
+                    transaction_number,
+                    transaction_date,
+                    cm.movement_type.name,
+                    cm.amount_account_currency,
+                    cm.amount_original_currency,
+                    cm.cash_account_id,
+                    cm.portfolio_id,
+                    '',  # No nominal amount for cash movements
+                    '',  # No price for cash movements
+                    '',  # No product ID for cash movements
+                    account_type
+                ])
+
+            # Process security movements
+            for sm in txn_data['security_movements']:
+                table_data.append([
+                    transaction_number,
+                    transaction_date,
+                    sm.movement_type.name,
+                    '',  # No cash amount for security movements
+                    '',  # No original amount for security movements
+                    sm.account_id,
+                    sm.portfolio_id,
+                    sm.amount_nominal,
+                    sm.price,
+                    sm.product_id,
+                    "SECURITIES"
+                ])
 
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
@@ -591,6 +677,56 @@ class Portfolio:
         account = self.search_account_id(account_id, currency, account_type)
         if account:
             print(f"Balance for account {account_id}: {account.balance}")
+
+    def list_transactions(self):
+        headers = ["Transaction Number", "Transaction Date", "Portfolio ID", "Account ID", "Currency",
+                "Movement Type", "Product ID", "Amount", "Price", "Value", "Movement Date", "Exchange Rate"]
+
+        table_data = []
+
+        processed_transactions = set()
+
+        for account in self.cash_accounts.values():
+            for transaction in account.transactions:
+                if transaction.transaction_number not in processed_transactions:
+                    for movement in transaction.cash_movements:
+                        row = [
+                            transaction.transaction_number,
+                            transaction.transaction_date,
+                            transaction.portfolio_id,
+                            movement.cash_account_id,
+                            movement.transaction_currency,
+                            movement.movement_type.name,
+                            "N/A",  # Product ID (not applicable for cash movements)
+                            movement.amount_account_currency,
+                            "N/A",  # Price (not applicable for cash movements)
+                            movement.amount_account_currency * movement.exchange_rate,
+                            movement.transaction_date,
+                            movement.exchange_rate
+                        ]
+                        table_data.append(row)
+
+                    for movement in transaction.security_movements:
+                        row = [
+                            transaction.transaction_number,
+                            transaction.transaction_date,
+                            transaction.portfolio_id,
+                            movement.account_id,
+                            self.default_currency,
+                            movement.movement_type.name,
+                            movement.product_id,
+                            movement.amount_nominal,
+                            movement.price,
+                            movement.amount_nominal * movement.price,
+                            movement.transaction_date,
+                            1.0  # Exchange rate (not applicable for security movements)
+                        ]
+                        table_data.append(row)
+
+                    processed_transactions.add(transaction.transaction_number)
+
+        print(f"Transactions in Portfolio {self.portfolio_id}:")
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
 
 class PortfolioAnalytics:
     def __init__(self, portfolio):
