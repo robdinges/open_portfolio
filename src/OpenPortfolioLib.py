@@ -13,6 +13,7 @@ class TransactionTemplate(Enum):
     BUY = 'purchase'
     SELL = 'sale'
     DIVIDEND = 'dividend'
+    DEPOSIT = 'deposit'
 
 class QuotationType(Enum):
     NOMINAL = 'nominal'
@@ -483,10 +484,13 @@ class Portfolio:
             print(f"Balance for account {account_id}: {account.balance}")
 
     def list_transactions(self):
-        headers = ["Transaction Number", "Transaction Date", "Portfolio ID", "Account ID", "Currency",
-                "Movement Type", "Product ID", "Amount", "Price", "Value", "Movement Date", "Exchange Rate"]
-
+        headers = ["Trans. Nr", "Trans. Date", "Ptf/Acc/Curr",
+                "Mov. Type", "Prod. ID", "Nominal/Amount", "Price QC", "Value QC", "FX", "Total " + self.default_currency, "Acc. Type"]
+        align=("left", "left", "left", "left", "left", "right", "right", "right", "right", "right","left")
         table_data = []
+
+        def round_amount(amount: float,decimals: int, currency: str = '', length: int = 10):
+            return f'{amount:.{decimals}f} {currency}'.rjust(10)
 
         processed_transactions = set()
 
@@ -497,40 +501,38 @@ class Portfolio:
                         row = [
                             transaction.transaction_number,
                             transaction.transaction_date,
-                            transaction.portfolio_id,
-                            movement.cash_account_id,
-                            movement.transaction_currency,
-                            movement.movement_type.name,
-                            "N/A",  # Product ID (not applicable for cash movements)
-                            movement.amount_account_currency,
-                            "N/A",  # Price (not applicable for cash movements)
-                            movement.amount_account_currency * movement.exchange_rate,
-                            movement.transaction_date,
-                            movement.exchange_rate
+                            f"{transaction.portfolio_id}/{movement.cash_account_id}/{movement.transaction_currency}",
+                            movement.movement_type.value,
+                            "",  # Product ID (not applicable for cash movements)
+                            "",
+                            "",  # Price (not applicable for cash movements)
+                            round_amount(movement.amount_account_currency * movement.exchange_rate,2, movement.transaction_currency),
+                            round_amount(movement.exchange_rate,4,length=8),
+                            round_amount(movement.amount_account_currency,2, self.default_currency),
+                            AccountType.CASH.value
                         ]
                         table_data.append(row)
-
+                        #ProductCollection.search_product_id(movement.product_id)
                     for movement in transaction.security_movements:
                         row = [
                             transaction.transaction_number,
                             transaction.transaction_date,
-                            transaction.portfolio_id,
-                            movement.account_id,
-                            self.default_currency,
-                            movement.movement_type.name,
+                            f"{transaction.portfolio_id}/{movement.account_id}",
+                            movement.movement_type.value,
                             movement.product_id,
                             movement.amount_nominal,
-                            movement.price,
-                            movement.amount_nominal * movement.price,
-                            movement.transaction_date,
-                            1.0  # Exchange rate (not applicable for security movements)
+                            round_amount(movement.price,2),
+                            round_amount(movement.amount_nominal * movement.price,2),
+                            "",  # Exchange rate (not applicable for security movements)
+                            "",
+                            AccountType.SECURITIES.value
                         ]
                         table_data.append(row)
 
                     processed_transactions.add(transaction.transaction_number)
 
         print(f"Transactions in Portfolio {self.portfolio_id}:")
-        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        print(tabulate(table_data, headers=headers, tablefmt="grid", colalign=align))
 
 class PortfolioAnalytics:
     def __init__(self, portfolio):
@@ -746,7 +748,8 @@ class TransactionManager:
         self.templates = {
             TransactionTemplate.BUY: self.buy_template,
             TransactionTemplate.SELL: self.sell_template,
-            TransactionTemplate.DIVIDEND: self.dividend_template
+            TransactionTemplate.DIVIDEND: self.dividend_template,
+            TransactionTemplate.DEPOSIT: self.deposit_template
         }
 
     @staticmethod
@@ -883,6 +886,19 @@ class TransactionManager:
         logging.info("Created sell transaction %s for portfolio %s", transaction.transaction_number, portfolio_id)
         return transaction
 
+    def deposit_template(self, transaction_date, portfolio_id, account_id, amount, transaction_currency):
+        transaction = Transaction(transaction_date, portfolio_id, account_id, transaction_currency)
+        cash_movement = CashMovement(
+            transaction=transaction,
+            amount_account_currency=amount,
+            amount_original_currency=amount,
+            movement_type=MovementType.DEPOSIT,
+            transaction_number=transaction.transaction_number,
+            transaction_currency=transaction_currency
+        )
+        transaction.add_cash_movement(cash_movement)
+        return transaction
+
     def dividend_template(self, transaction_date, portfolio_id, account_id, amount):
         transaction = Transaction(transaction_date, portfolio_id, account_id)
         cash_movement = CashMovement(
@@ -895,7 +911,7 @@ class TransactionManager:
         transaction.add_cash_movement(cash_movement)
         return transaction
 
-    def execute_transaction(self, transaction, portfolio, product_collection):
+    def execute_transaction1(self, transaction, portfolio, product_collection):
         logging.debug("Executing transaction...")
         is_valid, messages = transaction.validate_transaction(portfolio, product_collection)
         if not is_valid:
@@ -937,6 +953,47 @@ class TransactionManager:
         logging.info("Transaction executed: %s", transaction.transaction_number)
         return [f"Transaction {transaction.transaction_number} successfully executed."]
 
+    def execute_transaction(self, transaction, portfolio, product_collection):
+        logging.debug("Executing transaction...")
+        is_valid, messages = transaction.validate_transaction(portfolio, product_collection)
+        if not is_valid:
+            logging.error(f"Transaction validation ({transaction.transaction_number}) failed with messages: {messages}")
+            return messages
+
+        for movement in transaction.security_movements:
+            product = product_collection.search_product_id(movement.product_id)
+            if product:
+                existing_holding = next((h for h in portfolio.securities_account.holdings if h['product'].instrument_id == product.instrument_id), None)
+                if existing_holding:
+                    existing_holding['amount'] += movement.amount_nominal
+                else:
+                    portfolio.securities_account.holdings.append({
+                        'product': product,
+                        'amount': movement.amount_nominal
+                    })
+                product.add_transaction(transaction)
+            logging.debug(f"Processed security movement for product {movement.product_id}")
+
+        for movement in transaction.cash_movements:
+            account = None
+            if movement.cash_account_id == transaction.account_id:          
+                account = portfolio.search_account_id(transaction.account_id, currency=movement.transaction_currency)      
+                if account is None:
+                    account = portfolio.search_account_id(transaction.account_id,portfolio.default_currency)
+            if account:
+                account.balance += movement.amount_account_currency
+                logging.debug(f"Updated balance for account {account.cash_account_id}: {account.balance}")
+            else:
+                logging.error(f"Cash account {movement.cash_account_id} not found in portfolio {portfolio.portfolio_id}.")
+                raise ValueError(f"Cash account {movement.cash_account_id} not found in portfolio {portfolio.portfolio_id}.")
+
+        for account in portfolio.cash_accounts.values():
+            if transaction not in account.transactions:
+                account.add_transaction(transaction)
+
+        logging.info("Transaction executed: %s", transaction.transaction_number)
+        return [f"Transaction {transaction.transaction_number} successfully executed."]
+
     def record_transaction(self, transaction):
         self.transaction_history.append(transaction)
         logging.info("Transaction recorded: %s", transaction.transaction_number)
@@ -944,7 +1001,7 @@ class TransactionManager:
     def generate_report(self, transaction, portfolio, product_collection):
         return transaction.generate_report(portfolio, product_collection)
 
-    def create_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
+    def create_transaction1(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
         logging.debug("Creating transaction...")
         
         if template not in self.templates:
@@ -976,6 +1033,56 @@ class TransactionManager:
 
         transaction = self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, **kwargs)
         
+        # Ensure the transaction is unique for each portfolio
+        transaction.portfolio_id = portfolio_id
+        transaction.account_id = account_id
+        logging.debug(f"Created transaction {transaction.transaction_number} with account_id {account_id}")
+
+        return transaction
+
+    def create_transaction(self, transaction_date, portfolio_id, template, portfolio, product_collection, currency_prices, **kwargs):
+        logging.debug("Creating transaction...")
+
+        if template not in self.templates:
+            raise ValueError(f"Unknown template: {template}")
+
+        if template == TransactionTemplate.DEPOSIT:
+            transaction_currency = kwargs.get('transaction_currency')
+            try:
+                account = portfolio.get_account_by_currency(transaction_currency)
+                logging.debug(f"Found account in transaction currency: {account.cash_account_id}")
+            except ValueError:
+                raise ValueError(f"No account found for currency {transaction_currency} in portfolio {portfolio_id}")
+
+            account_id = account.cash_account_id
+            transaction = self.templates[template](transaction_date, portfolio_id, account_id, **kwargs)
+        else:
+            product_id = kwargs.get('product_id')
+            product = product_collection.search_product_id(product_id)
+            if not product:
+                raise ValueError(f"Product with ID {product_id} not found")
+
+            transaction_currency = product.issue_currency
+            logging.debug(f"Transaction currency: {transaction_currency}")
+
+            try:
+                account = portfolio.get_account_by_currency(transaction_currency)
+                exchange_rate = 1.0
+                logging.debug(f"Found account in transaction currency: {account.cash_account_id}")
+            except ValueError:
+                account = portfolio.get_account_by_currency(portfolio.default_currency)
+                logging.debug(f"Using default currency account: {account.cash_account_id}")
+                try:
+                    exchange_rate = 1 / currency_prices.get_latest_price(transaction_currency, portfolio.default_currency)
+                except ValueError:
+                    exchange_rate = currency_prices.get_latest_price(portfolio.default_currency, transaction_currency)
+                logging.debug(f"Exchange rate: {exchange_rate}")
+
+            account_id = account.cash_account_id
+            kwargs['exchange_rate'] = exchange_rate
+
+            transaction = self.templates[template](transaction_date, portfolio_id, account_id, portfolio, product_collection, **kwargs)
+
         # Ensure the transaction is unique for each portfolio
         transaction.portfolio_id = portfolio_id
         transaction.account_id = account_id
@@ -1117,11 +1224,15 @@ class Transaction:
                 sufficient_funds = False
                 continue
 
-            if movement.amount_nominal * movement.price < product.minimum_purchase_value:
+            if movement.amount_nominal < product.minimum_purchase_value:
                 messages.append(f"The transaction value for product {movement.product_id} does not meet the minimum purchase value.")
                 sufficient_funds = False
 
-            if movement.amount_nominal % product.smallest_trading_unit != 0:
+            factor = 100_000
+            order_amount = factor*movement.amount_nominal
+            verkoopeenheid = factor*product.smallest_trading_unit
+
+            if order_amount % verkoopeenheid != 0:
                 messages.append(f"The transaction amount for product {movement.product_id} is not a multiple of the smallest trading unit.")
                 sufficient_funds = False
 
