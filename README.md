@@ -1,5 +1,28 @@
 # OpenPortfolio
 
+## Overview
+
+OpenPortfolio is a modular Python library for managing investment portfolios
+in memory.  It now includes:
+
+* full support for clients, portfolios, cash and securities accounts
+* stock and bond products with pricing and accrued interest
+* multi‑currency handling and FX conversion
+* transaction templates (BUY, SELL, DEPOSIT, DIVIDEND) with simple
+	validation
+* comprehensive reporting tools and a realistic demo dataset generator
+* both a Tkinter desktop GUI and a Flask web UI with immediate transaction
+	summaries
+* lightweight SQLite persistence for clients and portfolios
+
+The core logic lives in ``src/open_portfolio`` and is organised into modules
+for accounts, transactions, products, pricing and analytics.  See
+``GETTING_STARTED.md`` and ``FEATURES.md`` for detailed usage notes,
+architecture overviews, and instructions for running the GUIs and tests.
+
+An old monolithic script ``OpenPortfolioLib.py`` remains for reference but is
+considered legacy; new development should import from ``open_portfolio``.
+
 ## To do
 
 - kosten berekenen

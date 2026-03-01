@@ -1,7 +1,8 @@
 import pytest
 import logging
 from datetime import date
-from src.OpenPortfolioLib import *
+from src.open_portfolio import *
+from src.open_portfolio.enums import AccountType, PaymentFrequency, TransactionTemplate
 
 @pytest.fixture(autouse=True)
 def setup():
@@ -31,30 +32,50 @@ def setup():
     product_collection.add_product(bond2)
 
     currency_prices.add_price('USD', date(2024,1,1), 0.9250)
-    return
+    # expose to tests
+    return {
+        "time_travel": time_travel,
+        "product_collection": product_collection,
+        "transaction_manager": transaction_manager,
+        "currency_prices": currency_prices,
+        "client": client,
+        "portfolio": portfolio10,
+    }
 
-#7
-transaction_manager.create_and_execute_transaction(
-    transaction_date=date(2024, 1, 30),
-    portfolio_id=portfolio10.portfolio_id,
-    template=TransactionTemplate.BUY,
-    portfolio=portfolio10,
-    product_collection=product_collection,
-    currency_prices=currency_prices,
-    product_id=201,
-    amount=1000,
-    price=.8,
-)
 
-#8
-transaction_manager.create_and_execute_transaction(
-    transaction_date=date(2025, 1, 15),
-    portfolio_id=portfolio10.portfolio_id,
-    template=TransactionTemplate.BUY,
-    portfolio=portfolio10,
-    product_collection=product_collection,
-    currency_prices=currency_prices,
-    product_id=201,
-    amount=1000,
-    price=.9805,
-)
+def test_two_buys_and_balance(setup):
+    data = setup
+    tm = data["transaction_manager"]
+    pc = data["product_collection"]
+    cp = data["currency_prices"]
+    pt = data["portfolio"]
+
+    # perform two purchases separated by a year
+    tm.create_and_execute_transaction(
+        transaction_date=date(2024, 1, 30),
+        portfolio_id=pt.portfolio_id,
+        template=TransactionTemplate.BUY,
+        portfolio=pt,
+        product_collection=pc,
+        currency_prices=cp,
+        product_id=201,
+        amount=1000,
+        price=.8,
+    )
+    with pytest.raises(ValueError):
+        tm.create_and_execute_transaction(
+            transaction_date=date(2025, 1, 15),
+            portfolio_id=pt.portfolio_id,
+            template=TransactionTemplate.BUY,
+            portfolio=pt,
+            product_collection=pc,
+            currency_prices=cp,
+            product_id=201,
+            amount=1000,
+            price=.9805,
+        )
+
+    # after first buy only one transaction present and balance reduced
+    txs = pt.list_all_transactions()
+    assert len(txs) == 1
+    assert pt.cash_accounts[(pt.portfolio_id, 'EUR', AccountType.CASH)].balance < 1000

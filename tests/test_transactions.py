@@ -1,6 +1,7 @@
 import pytest
 from datetime import timedelta, date
-from src.OpenPortfolioLib import *
+from src.open_portfolio import *
+from src.open_portfolio.enums import AccountType, PaymentFrequency, TransactionTemplate
 
 class TestTransactions:
     @pytest.fixture(autouse=True)

@@ -1,11 +1,20 @@
 [
+  "tests/test_database.py::test_database_client_portfolio",
   "tests/test_open_portfolio_lib.py::TestClientPortfolio::test_add_portfolio",
   "tests/test_open_portfolio_lib.py::TestPortfolioCalculations::test_calculate_return",
   "tests/test_open_portfolio_lib.py::TestTimeTravel::test_skip_days",
   "tests/test_open_portfolio_lib.py::TestTimeTravel::test_skip_working_days",
   "tests/test_open_portfolio_lib.py::TestTransactions::test_accrued_interest",
   "tests/test_open_portfolio_lib.py::TestTransactions::test_transaction_values",
+  "tests/test_pytest_sample.py::test_two_buys_and_balance",
+  "tests/test_reporting.py::test_portfolio_reporter_holdings",
+  "tests/test_reporting.py::test_portfolio_reporter_summary",
+  "tests/test_reporting.py::test_portfolio_reporter_text_export",
+  "tests/test_reporting.py::test_portfolio_reporter_transactions",
+  "tests/test_reporting.py::test_realistic_dataset_creation",
   "tests/test_transactions.py::TestTransactions::test_bond_transaction",
   "tests/test_transactions.py::TestTransactions::test_insufficient_funds",
-  "tests/test_transactions.py::TestTransactions::test_stock_transaction"
+  "tests/test_transactions.py::TestTransactions::test_stock_transaction",
+  "tests/test_web_app.py::test_index_page_contains_portfolio",
+  "tests/test_web_app.py::test_transaction_summary_shown"
 ]

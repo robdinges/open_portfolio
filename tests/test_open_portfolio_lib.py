@@ -1,6 +1,7 @@
 import pytest
 from datetime import timedelta, date
-from src.OpenPortfolioLib import *
+from src.open_portfolio import *
+from src.open_portfolio.enums import AccountType, PaymentFrequency, TransactionTemplate
 
 class TestTransactions:
     @pytest.fixture(autouse=True)
@@ -74,7 +75,8 @@ class TestTransactions:
         """Test the calculation of accrued interest."""
         nominal_value = 1000
         valuation_date = date(2024, 7, 2)
-        accrued_interest = self.test_bond.calculate_accrued_interest(nominal_value, self.time_travel, valuation_date)
+        # new signature takes just nominal and valuation_date
+        accrued_interest = self.test_bond.calculate_accrued_interest(nominal_value, valuation_date)
         assert accrued_interest == 15
 
     def test_transaction_values(self):
