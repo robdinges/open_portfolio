@@ -1,6 +1,6 @@
 # Bond Workspace
 
-Streamlit-app voor obligatiebeheer met persistente SQLite-opslag, transactiereconciliatie en analyse.
+Streamlit-app voor obligatiebeheer met persistente SQLite-opslag, transactiereconciliatie en transparante SELL-vs-HOLD analyse.
 
 ## Huidige indeling
 
@@ -9,7 +9,7 @@ Streamlit-app voor obligatiebeheer met persistente SQLite-opslag, transactiereco
 - `OpenPortfolioLib.py`  
   Portefeuille- en transactiekern.
 - `src/bond_suite/`  
-  Geconsolideerde package (engine + analytics wrappers).
+  Geconsolideerde package (engine + analytics wrappers), inclusief beslismodule `bond_decision_analysis.py`.
 - `data/portfolio.db`  
   SQLite database (automatisch aangemaakt).
 
@@ -55,9 +55,19 @@ Transactie-import is idempotent via unieke `tx_key`.
   - couponpercentage uit naampatroon `(x,xx%)`,
   - einddatum uit naampatroon `dd-mm-jjjj`.
 - **Analyse “Verkoop Nu”** houdt rekening met meeverkochte rente en additionele 0,1% verkoopkosten.
+- **SELL vs HOLD beslismodule** (`BondPosition`, `BondCalculator`) met cashflows vanaf vandaag en discounting naar vandaag.
+- **Scenariovergelijking** voor verkoopprijsband `current_price ±0,5%` plus HOLD tot maturity.
+- **Transparante analysetabellen**: inputdata, sale calculation, coupon schedule, discounted cashflows, final comparison.
+- **3D-opbrengstgrafiek in Analyse**:
+  - X-as: huidige verkoopprijs `±1,0%` (stap `0,1%`),
+  - Y-as: discount `%` van `0` tot `5` (stap `0,1%`),
+  - Z-as: opbrengstverschil `HOLD - SELL` in EUR.
 
 ## Ontwikkelgebruik
 
 ```python
 from bond_suite import Client, ProductCollection, TransactionManager, PortfolioBond, resultaten_tabel
+
+# Beslisanalyse
+from bond_suite import BondPosition, BondCalculator, compare_scenarios
 ```

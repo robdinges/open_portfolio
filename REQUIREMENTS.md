@@ -1,6 +1,6 @@
 # Requirements — Bond Portfolio Tool
 
-Datum: 2026-03-06
+Datum: 2026-03-07
 Status: Werkende baseline (bijgewerkt)
 
 ## 1) Scope
@@ -101,6 +101,50 @@ Het systeem ondersteunt:
   - meeverkochte rente,
   - additionele 0,1% transactiekosten.
 - Bedragvelden tonen alleen bedragen (geen tekstuele toelichting in hetzelfde veld).
+
+### FR-16 — SELL vs HOLD beslisanalyse (vandaag-vooruit)
+
+- De beslisvergelijking gebruikt alleen cashflows vanaf vandaag.
+- Historische coupons worden alleen als context getoond en wegen niet mee in de SELL-vs-HOLD keuze.
+- Alle toekomstige cashflows worden contant gemaakt naar vandaag met `discount_rate_percent`.
+
+### FR-17 — Scenarioberekening verkoopprijsband
+
+- SELL-scenario wordt berekend voor drie prijsaannames:
+  - `current_price_percent - 0.5%`
+  - `current_price_percent`
+  - `current_price_percent + 0.5%`
+- Verkoopopbrengst bevat opgelopen rente:
+  - `sale_proceeds = clean_price + accrued_interest_current`
+- Bedragen worden geconverteerd naar EUR via `current_fx_rate` wanneer nodig.
+
+### FR-18 — HOLD tot maturity
+
+- HOLD-scenario bevat:
+  - alle resterende coupons,
+  - aflossing op 100% nominale waarde op maturity.
+- Elke toekomstige cashflowregel toont minimaal:
+  - datum,
+  - bedrag,
+  - discount factor,
+  - present value.
+
+### FR-19 — Analyse-output contract
+
+- Analyse levert minimaal deze outputstructuur:
+  - `scenario_summary`
+  - `sell_results`
+  - `hold_results`
+  - `discounted_cashflows_table`
+  - `final_decision`
+- Bij ontbrekende velden retourneert het systeem expliciet `missing_required_inputs` met veldlijst.
+
+### FR-20 — 3D gevoeligheidsanalyse in UI
+
+- Analysepagina toont een 3D-grafiek met opbrengstverschillen (`HOLD - SELL`, EUR):
+  - X-as: verkoopprijs `current_price_percent ±1.0%` met stap `0.1%`.
+  - Y-as: discount `%` van `0.0` tot `5.0` met stap `0.1%`.
+  - Z-as: opbrengstverschil in EUR.
 
 ### FR-15 — Instrumentverrijking vanuit transactie
 

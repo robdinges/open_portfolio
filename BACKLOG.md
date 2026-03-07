@@ -1,6 +1,6 @@
 # Backlog (Must / Should / Could)
 
-Datum: 2026-03-06
+Datum: 2026-03-07
 
 ## Reeds opgeleverd
 
@@ -13,6 +13,9 @@ Datum: 2026-03-06
 - Instrumentverrijking vanuit transactie (valuta, coupon %, einddatum uit naam).
 - Tijdelijke DB-resetknop in UI.
 - Analyse “Verkoop Nu” met meeverkochte rente en 0,1% kosten.
+- Nieuwe SELL-vs-HOLD beslismodule (`BondPosition`, `BondCalculator`, `compare_scenarios`).
+- Analysepagina met transparante tabellen (input, sale, coupon schedule, discounted cashflows, final decision).
+- 3D gevoeligheidsgrafiek toegevoegd (prijs-as ±1%, discount-as 0-5%).
 
 ## Must
 
@@ -65,6 +68,10 @@ Datum: 2026-03-06
 7. **Afrondingsbeleid reconciliatie**
    - Formele keuze wanneer tussenstappen op 2 decimalen afgerond worden.
    - Uniforme afrondingsregels voor brokervergelijking en scenario-uitkomsten.
+
+8. **Analyse-export naar Excel**
+   - Downloadknop op Analysepagina voor directe export van alle beslisatabellen.
+   - Vaste tabbladnaam `Analyse` en kolomvolgorde consistent met UI.
 
 ## Could
 
