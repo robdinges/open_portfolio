@@ -1,0 +1,4 @@
+numpy-financial
+pandas
+tabulate
+streamlit

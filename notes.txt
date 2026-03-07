@@ -1,0 +1,37 @@
+Transactie:
+
+Aankoop:
+A - Nominale waarde [Aantal / nominaal]
+B - Obligatiekoers in % [Koers]
+B2 - Meegekochte rente [Couponrente]
+C - Wisselkoers tussen Emissievaluta van de obligatie en de rekening (=EUR), is [Valutakoers] in importbestand
+D - transactiekosten (percentage van A*B*C)
+E - kostprijs = (((A*B)+B2)*C)+D, bedrag dat op de geldrekening wordt afgerekend [Transactiebedrag]
+F - Verder vastleggen: Rekeningnummer, Product id [ISIN], [Fonds], tx_type  [Transactie type],[Omschrijving], tx_date [Transactiedatum], settlement date  [Valutadatum](=tx_date + 2 werkdagen?), [referentie]
+
+Verkoop:
+A - Nominale waarde [Aantal / nominaal]
+B - Obligatiekoers in % [Koers]
+B2 - Meeverkochte rente [Couponrente]
+C - Wisselkoers tussen Emissievaluta van de obligatie en de rekening (=EUR), is [Valutakoers] in importbestand
+D - transactiekosten (percentage van A*B*C) [Provisie]
+E - totale opbrengst = (((A*B)+B2)*C)+D, bedrag dat op de geldrekening wordt afgerekend [Transactiebedrag]
+F - Verder vastleggen: Rekeningnummer, Product id [ISIN], [Fonds], tx_type [Transactie type], [Omschrijving],tx_date [Transactiedatum], settlement date [Valutadatum] (=tx_date + 2 werkdagen?), [referentie]
+
+Coupon:
+A - couponrente
+B - Wisselkoers tussen Emissievaluta van de obligatie en de rekening (=EUR), is [Valutakoers] in importbestand
+C - totale opbrengst = (A*B), bedrag dat op de geldrekening wordt afgerekend [Transactiebedrag]
+D - Verder vastleggen: [Rekeningnummer], Product id [ISIN], [Fonds], tx_type [Transactie type], [Omschrijving], tx_date [Transactiedatum], settlement date [Valutadatum] (=tx_date + 2 werkdagen?), [referentie]
+
+Aflossing:
+A - Nominale waarde []
+B - Obligatiekoers in % (bij aflossing altijd 100%) [Koers]
+C - Wisselkoers tussen Emissievaluta van de obligatie en de rekening (=EUR), is [Valutakoers] in importbestand
+D - totale opbrengst = (A*B*C), bedrag dat op de geldrekening wordt afgerekend [Transactiebedrag]
+E - Verder vastleggen: [Rekeningnummer], Product id [ISIN], [Fonds], tx_type [Transactie type], [Omschrijving], tx_date [Transactiedatum], settlement date [Valutadatum] (=tx_date + 2 werkdagen?), [referentie]
+
+Valutakoersen
+
+- Bijwerken vanuit transacties (van, naar, datum, koop/verkoop, koers)
+- Inlezen via google
