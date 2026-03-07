@@ -10,14 +10,17 @@ from pathlib import Path
 from io import StringIO
 from decimal import Decimal, InvalidOperation
 
+import numpy as np
 import pandas as pd
 import streamlit as st  # pyright: ignore[reportMissingImports]
 import altair as alt
+import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 from bond_suite import (  # noqa: E402
     Bond,
+    BondPosition,
     CashMovement,
     Client,
     MarketDataStore,
@@ -28,6 +31,8 @@ from bond_suite import (  # noqa: E402
     Transaction,
     TransactionManager,
     TransactionTemplate,
+    compare_scenarios,
+    generate_coupon_schedule,
 )
 
 
@@ -2995,7 +3000,6 @@ def show_analysis() -> None:
         format="%.1f%%",
         key="analysis_discount_rate",
     )
-    discount_rate = discount_rate_pct / 100.0
 
     accrued_interest_now = _estimate_accrued_interest_now(
         as_of=today,
@@ -3006,75 +3010,39 @@ def show_analysis() -> None:
         freq_per_year=max(freq, 1),
     )
 
-    def _net_sale_value(price_pct: float) -> float:
-        gross = (max(0.0, outstanding_nominal) * (price_pct / 100.0)) + accrued_interest_now
-        tx_cost = gross * 0.001
-        return gross - tx_cost
-
-    def _discount_to_today(amount: float, flow_date: date) -> float:
-        if flow_date <= today:
-            return amount
-        years = (flow_date - today).days / 365.0
-        return amount / ((1.0 + discount_rate) ** years)
-
     historical_basis_amount = max(0.0, outstanding_nominal) * (historical_cost_price_pct / 100.0)
     if historical_basis_amount <= 0:
         historical_basis_amount = buy_cost_price
 
-    historical_basis_today = _discount_to_today(historical_basis_amount, today)
-    received_coupon_today = _discount_to_today(received_coupon_total, today)
+    fx_candidates = pd.Series(dtype=float)
+    if "fx_rate" in bond_tx.columns:
+        fx_candidates = pd.to_numeric(bond_tx["fx_rate"], errors="coerce").dropna()
+    if currency == "EUR":
+        current_fx_rate = 1.0
+    elif not fx_candidates.empty:
+        current_fx_rate = float(fx_candidates.iloc[-1])
+    else:
+        current_fx_rate = 1.0
 
-    sell_prices = [latest_price_pct - 0.5, latest_price_pct, latest_price_pct + 0.5]
-    scenario_rows: list[dict[str, object]] = []
-    for price_pct in sell_prices:
-        net_sale = _net_sale_value(price_pct)
-        sale_today = _discount_to_today(net_sale, today)
-        total_value_today = received_coupon_today + sale_today
-        result_amount = total_value_today - historical_basis_today
-        result_pct = (result_amount / historical_basis_today * 100.0) if historical_basis_today else 0.0
-        label = f"Verkoop nu @ {price_pct:,.2f}%"
-        calc_text = (
-            "Uitkomst % = ((Ontvangen coupons (PV vandaag) + Verkoopopbrengst nu netto - Historische kostprijs (PV vandaag)) "
-            "/ Historische kostprijs (PV vandaag)) * 100"
-        )
-        scenario_rows.append(
-            {
-                "Scenario": label,
-                "Koers %": round(price_pct, 3),
-                "Uitkomst %": round(result_pct, 3),
-                "Ontvangen coupons (PV vandaag)": round(received_coupon_today, 6),
-                "Verkoopopbrengst nu netto": round(sale_today, 6),
-                "Historische kostprijs (PV vandaag)": round(historical_basis_today, 6),
-                "Exacte berekening": calc_text,
-            }
-        )
-
-    hold_pv = 0.0
-    future_coupon_dates = _future_coupon_dates(today, maturity_date, freq) if maturity_date else []
-    if max(0.0, outstanding_nominal) > 0 and maturity_date:
-        coupon_amount = outstanding_nominal * (coupon_pct / 100.0) / max(freq, 1)
-        for coupon_date in future_coupon_dates:
-            hold_pv += _discount_to_today(coupon_amount, coupon_date)
-        hold_pv += _discount_to_today(outstanding_nominal, maturity_date)
-
-    hold_total_value_today = received_coupon_today + hold_pv
-    hold_result_amount = hold_total_value_today - historical_basis_today
-    hold_result_pct = (hold_result_amount / historical_basis_today * 100.0) if historical_basis_today else 0.0
-    hold_calc_text = (
-        "Uitkomst % = ((Ontvangen coupons (PV vandaag) + PV toekomstige coupons + PV aflossing - Historische kostprijs (PV vandaag)) "
-        "/ Historische kostprijs (PV vandaag)) * 100"
+    purchase_date_for_analysis = first_buy_date or start_date or today
+    maturity_date_for_analysis = maturity_date or today
+    position = BondPosition(
+        purchase_date=purchase_date_for_analysis,
+        historical_cost_price_percent=float(historical_cost_price_pct),
+        maturity_date=maturity_date_for_analysis,
+        coupon_rate_percent=float(coupon_pct),
+        coupon_frequency_per_year=max(1, int(freq)),
+        nominal_value_position=max(0.0, float(outstanding_nominal)),
+        current_price_percent=float(latest_price_pct),
+        accrued_interest_current=float(accrued_interest_now),
+        investment_currency=str(currency),
+        account_currency="EUR",
+        current_fx_rate=float(current_fx_rate),
+        discount_rate_percent=float(discount_rate_pct),
+        settlement_days=2,
     )
-    scenario_rows.append(
-        {
-            "Scenario": "Aanhouden tot aflossing (100%)",
-            "Koers %": 100.0,
-            "Uitkomst %": round(hold_result_pct, 3),
-            "Ontvangen coupons (PV vandaag)": round(received_coupon_today, 6),
-            "Verkoopopbrengst nu netto": round(hold_pv, 6),
-            "Historische kostprijs (PV vandaag)": round(historical_basis_today, 6),
-            "Exacte berekening": hold_calc_text,
-        }
-    )
+    analysis_result = compare_scenarios(position)
+    coupon_schedule_df = generate_coupon_schedule(position)
 
     left, right = st.columns(2)
     with right:
@@ -3086,6 +3054,7 @@ def show_analysis() -> None:
             {"Veld": "Historische kostprijs bedrag", "Waarde": f"{currency} {historical_basis_amount:,.2f}"},
             {"Veld": "Ontvangen coupons", "Waarde": f"{currency} {received_coupon_total:,.2f}"},
             {"Veld": "Meeverkochte rente (nu)", "Waarde": f"{currency} {accrued_interest_now:,.2f}"},
+            {"Veld": "FX naar EUR", "Waarde": f"{current_fx_rate:,.6f}"},
             {"Veld": "Discount %", "Waarde": f"{discount_rate_pct:,.2f}%"},
             {"Veld": "Startdatum", "Waarde": _format_date_display(start_date) if start_date else "-"},
             {"Veld": "Einddatum", "Waarde": _format_date_display(maturity_date) if maturity_date else "-"},
@@ -3139,31 +3108,87 @@ def show_analysis() -> None:
             )
             st.altair_chart((koers_line + koers_points + purchase_line).properties(height=320), use_container_width=True)
 
-    st.markdown("**Scenariovergelijking (compact)**")
-    scenario_raw_df = pd.DataFrame(scenario_rows)
-    scenario_df = scenario_raw_df[["Scenario", "Koers %", "Uitkomst %"]].copy()
-    scenario_df["Koers %"] = scenario_df["Koers %"].map(lambda value: f"{value:,.3f}%")
-    scenario_df["Uitkomst %"] = scenario_df["Uitkomst %"].map(lambda value: f"{value:,.3f}%")
-    st.dataframe(scenario_df, use_container_width=True, hide_index=True)
+    st.markdown("**Beslisanalyse (SELL vs HOLD)**")
+    st.caption("Beslissing gebruikt uitsluitend cashflows vanaf vandaag, verdisconteerd naar vandaag met de gekozen discount rate.")
 
-    hover_df = scenario_raw_df.copy()
-    hover_df["Uitkomst_label"] = hover_df["Uitkomst %"].map(lambda value: f"{value:,.3f}%")
-    hover_chart_base = alt.Chart(hover_df).encode(
-        x=alt.X("Scenario:N", title="Scenario"),
-        y=alt.Y("Uitkomst %:Q", title="Uitkomst %"),
-        tooltip=[
-            alt.Tooltip("Scenario:N", title="Scenario"),
-            alt.Tooltip("Koers %:Q", title="Koers %", format=".3f"),
-            alt.Tooltip("Uitkomst %:Q", title="Uitkomst %", format=".3f"),
-            alt.Tooltip("Ontvangen coupons (PV vandaag):Q", title="Ontvangen coupons (PV)", format=",.6f"),
-            alt.Tooltip("Verkoopopbrengst nu netto:Q", title="Scenario-opbrengst component", format=",.6f"),
-            alt.Tooltip("Historische kostprijs (PV vandaag):Q", title="Historische kostprijs (PV)", format=",.6f"),
-            alt.Tooltip("Exacte berekening:N", title="Exacte berekening"),
-        ],
-    )
-    hover_points = hover_chart_base.mark_point(size=180, filled=True)
-    hover_labels = hover_chart_base.mark_text(dy=-10).encode(text=alt.Text("Uitkomst_label:N"))
-    st.altair_chart((hover_points + hover_labels).properties(height=260), use_container_width=True)
+    scenario_summary = analysis_result.get("scenario_summary", {})
+    if scenario_summary.get("status") == "missing_required_inputs":
+        missing_fields = scenario_summary.get("missing_fields", [])
+        missing_text = ", ".join(str(field) for field in missing_fields) if missing_fields else "onbekend"
+        st.warning(f"Analyse kan niet worden uitgevoerd. Ontbrekende/ongeldige velden: {missing_text}")
+    else:
+        final_decision = analysis_result.get("final_decision", {})
+        decision_text = str(final_decision.get("statement") or "Geen beslistekst beschikbaar.")
+        st.success(decision_text)
+
+        st.markdown("**1) Input data used**")
+        st.dataframe(pd.DataFrame([position.__dict__]), use_container_width=True, hide_index=True)
+
+        st.markdown("**2) Sale calculation**")
+        sell_df = analysis_result.get("sell_results", pd.DataFrame())
+        st.dataframe(sell_df, use_container_width=True, hide_index=True)
+
+        st.markdown("**3) Remaining coupon schedule**")
+        st.dataframe(coupon_schedule_df, use_container_width=True, hide_index=True)
+
+        st.markdown("**4) Discounted cashflow table**")
+        discounted_df = analysis_result.get("discounted_cashflows_table", pd.DataFrame())
+        st.dataframe(discounted_df, use_container_width=True, hide_index=True)
+
+        st.markdown("**5) Final comparison**")
+        st.dataframe(pd.DataFrame([final_decision]), use_container_width=True, hide_index=True)
+
+        st.markdown("**3D opbrengstenanalyse**")
+        st.caption("Z-as = verschil in opbrengst (EUR): HOLD minus SELL. Positief betekent HOLD beter.")
+        price_axis = np.round(np.arange(latest_price_pct - 1.0, latest_price_pct + 1.0 + 0.0001, 0.1), 3)
+        discount_axis = np.round(np.arange(0.0, 5.0 + 0.0001, 0.1), 3)
+        z_values = np.zeros((len(discount_axis), len(price_axis)))
+
+        base_payload = {
+            "purchase_date": position.purchase_date,
+            "historical_cost_price_percent": position.historical_cost_price_percent,
+            "maturity_date": position.maturity_date,
+            "coupon_rate_percent": position.coupon_rate_percent,
+            "coupon_frequency_per_year": position.coupon_frequency_per_year,
+            "nominal_value_position": position.nominal_value_position,
+            "accrued_interest_current": position.accrued_interest_current,
+            "investment_currency": position.investment_currency,
+            "account_currency": position.account_currency,
+            "current_fx_rate": position.current_fx_rate,
+            "settlement_days": position.settlement_days,
+        }
+
+        for i, discount_pct in enumerate(discount_axis):
+            for j, price_pct in enumerate(price_axis):
+                grid_position = BondPosition(
+                    **base_payload,
+                    current_price_percent=float(price_pct),
+                    discount_rate_percent=float(discount_pct),
+                )
+                grid_result = compare_scenarios(grid_position)
+                grid_final = grid_result.get("final_decision", {})
+                z_values[i, j] = float(grid_final.get("difference_hold_minus_sell_eur", 0.0))
+
+        surface_fig = go.Figure(
+            data=[
+                go.Surface(
+                    x=price_axis,
+                    y=discount_axis,
+                    z=z_values,
+                    colorbar={"title": "HOLD - SELL (EUR)"},
+                )
+            ]
+        )
+        surface_fig.update_layout(
+            height=560,
+            margin={"l": 0, "r": 0, "b": 0, "t": 30},
+            scene={
+                "xaxis_title": "Huidige verkoopprijs (%)",
+                "yaxis_title": "Discount (%)",
+                "zaxis_title": "Opbrengstverschil (EUR)",
+            },
+        )
+        st.plotly_chart(surface_fig, use_container_width=True)
 
     st.markdown("**Bekende transacties**")
     if bond_tx.empty:
