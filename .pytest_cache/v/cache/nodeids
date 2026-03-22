@@ -1,5 +1,7 @@
 [
   "tests/test_database.py::test_database_client_portfolio",
+  "tests/test_gui_scenario.py::test_client_switching_and_portfolio_buy",
+  "tests/test_gui_scenario.py::test_menu_pages_work",
   "tests/test_reporting.py::test_portfolio_reporter_holdings",
   "tests/test_reporting.py::test_portfolio_reporter_summary",
   "tests/test_reporting.py::test_portfolio_reporter_text_export",

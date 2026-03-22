@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Holdings - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Holdings</h2>
+<form method="get" style="margin-bottom:2em;">
+  <label for="portfolio_id">Kies portefeuille:</label>
+  <select name="portfolio_id" id="portfolio_id" onchange="this.form.submit()">
+    <option value="">-- kies --</option>
+    {% for p in portfolios %}
+      <option value="{{ p.portfolio_id }}" {% if selected_portfolio and p.portfolio_id == selected_portfolio.portfolio_id %}selected{% endif %}>{{ p.name }}</option>
+    {% endfor %}
+  </select>
+</form>
+{% if selected_portfolio %}
+<table>
+  <thead>
+    <tr><th>Instrument ID</th><th>Naam</th><th>Type</th><th>Valuta</th><th>Aantal/Nom.</th><th>Laatste koers</th><th>Acties</th></tr>
+  </thead>
+  <tbody>
+    {% if selected_portfolio.securities_account and selected_portfolio.securities_account.holdings %}
+      {% for h in selected_portfolio.securities_account.holdings %}
+      <tr>
+        <td>{{ h.product.instrument_id }}</td>
+        <td>{{ h.product.description }}</td>
+        <td>{{ h.product.__class__.__name__ }}</td>
+        <td>{{ h.product.issue_currency }}</td>
+        <td class="valuta">{{ format_currency(h.amount, h.product.issue_currency) }}</td>
+        <td class="valuta">{{ format_currency(h.last_price, h.product.issue_currency) }}</td>
+        <td>
+          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=BUY">B</a>
+          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=SELL">S</a>
+        </td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="6">Geen holdings voor deze portefeuille.</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

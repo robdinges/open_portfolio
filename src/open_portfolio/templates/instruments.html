@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Instruments - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Instruments</h2>
+<table>
+  <thead>
+    <tr><th>ID</th><th>Description</th><th>Type</th><th>Currency</th></tr>
+  </thead>
+  <tbody>
+    {% for pid, prod in products.items() %}
+    <tr>
+      <td>{{ pid }}</td>
+      <td>{{ prod.description }}</td>
+      <td>{{ prod.__class__.__name__ }}</td>
+      <td>{{ prod.issue_currency }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

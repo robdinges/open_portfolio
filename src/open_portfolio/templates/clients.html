@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Clients - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Clients</h2>
+<table>
+  <thead>
+    <tr><th>ID</th><th>Name</th><th>Portfolios</th></tr>
+  </thead>
+  <tbody>
+    {% for c in clients %}
+    <tr>
+      <td>{{ c.client_id }}</td>
+      <td>{{ c.name }}</td>
+      <td>
+        {% for p in c.portfolios %}
+          <a href="/portfolios/{{ p.portfolio_id }}">{{ p.name }}</a>{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

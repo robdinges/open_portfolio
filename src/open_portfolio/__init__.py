@@ -18,7 +18,6 @@ from .prices import CurrencyPrices, ProductPrices
 from .analytics import PortfolioAnalytics
 from .product_collection import ProductCollection
 from .database import Database
-from .gui import PortfolioApp
 from .web_app import make_app, run as run_web_app
 from .sample_data import create_realistic_dataset
 from .reporting import PortfolioReporter
@@ -40,7 +39,6 @@ __all__ = [
     "ProductPrices",
     "PortfolioAnalytics",
     "ProductCollection",
-    "PortfolioApp",
     "make_app",
     "run_web_app",
     "Database",

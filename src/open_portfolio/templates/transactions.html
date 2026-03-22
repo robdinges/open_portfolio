@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Transacties - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Transacties</h2>
+<table>
+  <thead>
+    <tr><th>Datum</th><th>Portefeuille</th><th>Type</th><th>Product</th><th>Aantal</th><th>Prijs</th><th>Bedrag</th></tr>
+  </thead>
+  <tbody>
+    {% for tx in transactions %}
+    <tr>
+      <td>{{ tx.transaction_date }}</td>
+      <td>{{ tx.portfolio_id }}</td>
+      <td>{{ tx.template.name }}</td>
+      <td>{{ tx.product_id }}</td>
+      <td class="valuta">{{ tx.amount }}</td>
+      <td class="valuta">{{ tx.price }}</td>
+      <td class="valuta">{{ tx.amount * tx.price }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

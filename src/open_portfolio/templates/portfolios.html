@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Portfolios - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Portfolios</h2>
+<table>
+  <thead>
+    <tr><th>ID</th><th>Name</th><th>Client</th><th>Cash Accounts</th></tr>
+  </thead>
+  <tbody>
+    {% for p in portfolios %}
+    <tr>
+      <td>{{ p.portfolio_id }}</td>
+      <td>{{ p.name }}</td>
+      <td>{{ p.client.name }}</td>
+      <td>
+        {% for (aid, curr, atype), acc in p.cash_accounts.items() %}
+          {{ aid }} ({{ curr }}, {{ atype.name }}){% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

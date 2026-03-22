@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Nieuwe Transactie - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Nieuwe transactie</h2>
+<form method="post">
+  <div class="form-row">
+    <label for="client_id">Klant</label>
+    <select name="client_id" id="client_id" required onchange="this.form.submit()" style="max-width: 300px;">
+      {% for c in clients %}
+        <option value="{{ c.client_id }}" {% if c.client_id == selected_client_id %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="portfolio_id">Portefeuille</label>
+    <select name="portfolio_id" id="portfolio_id" required onchange="this.form.submit()" style="max-width: 300px;">
+      {% for p in portfolios %}
+        <option value="{{ p.portfolio_id }}" {% if p.portfolio_id == selected_portfolio_id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="template">Type</label>
+    <select name="template" id="template" required onchange="this.form.submit()" style="max-width: 200px;">
+      {% for t in templates %}
+        <option value="{{ t.name }}" {% if t.name == selected_template %}selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label for="product_id">Instrument</label>
+    <select name="product_id" id="product_id" required onchange="this.form.submit()" style="max-width: 400px;">
+      {% for pid, prod in products.items() %}
+        <option value="{{ pid }}" {% if pid == selected_product_id %}selected{% endif %}>{{ prod.description }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if show_amount %}
+  <div class="form-row">
+    <label for="amount">Aantal{% if amount_label %} ({{ amount_label }}){% endif %}</label>
+    <input type="number" name="amount" id="amount" step="0.01" min="0" max="1000000000" style="max-width: 200px;">
+  </div>
+  {% endif %}
+  {% if show_nominal %}
+  <div class="form-row">
+    <label for="nominal">Nominaal</label>
+    <input type="number" name="nominal" id="nominal" step="any" value="{{ nominal or '' }}" required />
+  </div>
+  {% endif %}
+  <div class="form-row">
+    <label for="price">Prijs</label>
+    <input type="number" name="price" id="price" step="any" value="{{ price or '' }}" required />
+  </div>
+  <div class="form-row">
+    <label for="cash_account">Geldrekening</label>
+    <select name="cash_account" id="cash_account" required>
+      {% for acc in cash_accounts %}
+        <option value="{{ acc.aid }}" {% if acc.aid == selected_cash_account %}selected{% endif %}>
+          {{ acc.aid }} ({{ acc.curr }}, saldo: {{ acc.balance }})
+        </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="form-row">
+    <label>Kosteninschatting</label>
+    <span>{{ kosteninschatting or '-' }}</span>
+  </div>
+  <div class="form-actions">
+    <button class="button" type="submit" name="save" value="1">Opslaan</button>
+    <button class="button cancel" type="submit" name="cancel" value="1">Annuleren</button>
+  </div>
+</form>
+{% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% endblock %}

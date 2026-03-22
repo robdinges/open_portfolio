@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}OpenPortfolio{% endblock %}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; background: #f7f7fa; color: #222; }
+        header, nav { background: #2c3e50; color: #fff; padding: 1em; }
+        nav a { color: #fff; margin-right: 1.5em; text-decoration: none; font-weight: 500; }
+        nav a.active { text-decoration: underline; }
+        main { max-width: 900px; margin: 2em auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 2em; }
+        .form-row { display: flex; align-items: center; margin-bottom: 1em; }
+        .form-row label { flex: 0 0 180px; font-weight: 500; }
+        .form-row input, .form-row select { flex: 1; padding: 0.5em; border: 1px solid #bbb; border-radius: 4px; }
+        .form-actions { display: flex; gap: 1em; margin-top: 2em; }
+        .button { background: #2980b9; color: #fff; border: none; border-radius: 4px; padding: 0.6em 1.2em; font-size: 1em; cursor: pointer; }
+        .button.cancel { background: #aaa; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+        th, td { padding: 0.5em 0.7em; border-bottom: 1px solid #eee; text-align: left; }
+        th { background: #f0f4f8; }
+        .valuta { text-align: right; font-variant-numeric: tabular-nums; min-width: 7em; }
+        .actions { white-space: nowrap; }
+        .error { color: #c0392b; font-weight: 500; }
+        .success { color: #27ae60; font-weight: 500; }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <h1>OpenPortfolio</h1>
+        <nav>
+            <a href="/" class="{% if active_page == 'home' %}active{% endif %}">Home</a>
+            <a href="/clients" class="{% if active_page == 'clients' %}active{% endif %}">Clients</a>
+            <a href="/portfolios" class="{% if active_page == 'portfolios' %}active{% endif %}">Portfolios</a>
+            <a href="/accounts" class="{% if active_page == 'accounts' %}active{% endif %}">Cash Accounts</a>
+            <a href="/instruments" class="{% if active_page == 'instruments' %}active{% endif %}">Instruments</a>
+            <a href="/holdings" class="{% if active_page == 'holdings' %}active{% endif %}">Holdings</a>
+            <a href="/transactions" class="{% if active_page == 'transactions' %}active{% endif %}">Transactions</a>
+        </nav>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

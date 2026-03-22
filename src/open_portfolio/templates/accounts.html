@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Cash Accounts - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Cash Accounts</h2>
+<table>
+  <thead>
+    <tr><th>Portfolio</th><th>Account ID</th><th>Currency</th><th>Type</th><th>Balance</th></tr>
+  </thead>
+  <tbody>
+    {% for acc in accounts %}
+    <tr>
+      <td>{{ acc.portfolio.name }}</td>
+      <td>{{ acc.aid }}</td>
+      <td>{{ acc.curr }}</td>
+      <td>{{ acc.atype.name }}</td>
+      <td class="valuta">{{ acc.balance }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
