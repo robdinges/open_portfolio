@@ -179,16 +179,25 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         # Zorg dat elke portfolio een client attribuut heeft
         selected_client_id = request.args.get("client_id", type=int)
         selected_client = None
-        for c in clients:
-            if selected_client_id and c.client_id == selected_client_id:
-                selected_client = c
-                break
-        if not selected_client:
-            selected_client = clients[0]
-        for p in selected_client.portfolios:
-            if not hasattr(p, 'client'):
-                p.client = selected_client
-        return render_template("portfolios.html", portfolios=selected_client.portfolios, clients=clients, selected_client=selected_client)
+        portfolios = []
+        if selected_client_id:
+            for c in clients:
+                if c.client_id == selected_client_id:
+                    selected_client = c
+                    break
+            if selected_client:
+                portfolios = selected_client.portfolios
+                for p in portfolios:
+                    if not hasattr(p, 'client'):
+                        p.client = selected_client
+        else:
+            # Verzamel alle portfolios van alle clients
+            for c in clients:
+                for p in c.portfolios:
+                    if not hasattr(p, 'client'):
+                        p.client = c
+                    portfolios.append(p)
+        return render_template("portfolios.html", portfolios=portfolios, clients=clients, selected_client=selected_client)
 
     @app.route("/accounts")
     def accounts_page():

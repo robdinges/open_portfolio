@@ -3,7 +3,13 @@
 {% block content %}
 <h2>Holdings</h2>
 <form method="get" style="margin-bottom:2em;">
-  <label for="portfolio_id">Kies portefeuille:</label>
+  <label for="client_id">Kies client:</label>
+  <select name="client_id" id="client_id" onchange="this.form.submit()">
+    {% for c in clients %}
+      <option value="{{ c.client_id }}" {% if selected_client and c.client_id == selected_client.client_id %}selected{% endif %}>{{ c.name }}</option>
+    {% endfor %}
+  </select>
+  <label for="portfolio_id" style="margin-left:2em">Kies portefeuille:</label>
   <select name="portfolio_id" id="portfolio_id" onchange="this.form.submit()">
     <option value="">-- kies --</option>
     {% for p in portfolios %}
