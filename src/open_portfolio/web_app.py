@@ -69,21 +69,28 @@ def make_app(client=None, product_collection=None, currency_prices=None):
     def holdings_page():
         selected_client_id = request.args.get("client_id", type=int)
         selected_client = None
-        for c in clients:
-            if selected_client_id and c.client_id == selected_client_id:
-                selected_client = c
-                break
-        if not selected_client:
-            selected_client = clients[0]
+        portfolios = []
+        if selected_client_id:
+            for c in clients:
+                if c.client_id == selected_client_id:
+                    selected_client = c
+                    break
+            if selected_client:
+                portfolios = selected_client.portfolios
+        else:
+            # Verzamel alle portfolios van alle clients
+            for c in clients:
+                for p in c.portfolios:
+                    portfolios.append(p)
         selected_portfolio_id = request.args.get("portfolio_id", type=int)
         selected_portfolio = None
-        for p in selected_client.portfolios:
+        for p in portfolios:
             if selected_portfolio_id and p.portfolio_id == selected_portfolio_id:
                 selected_portfolio = p
                 break
         return render_template(
             "holdings.html",
-            portfolios=selected_client.portfolios,
+            portfolios=portfolios,
             selected_portfolio=selected_portfolio,
             selected_client=selected_client,
             clients=clients,
