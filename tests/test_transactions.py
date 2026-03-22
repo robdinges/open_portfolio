@@ -182,6 +182,17 @@ class TestTransactions:
         assert accrued_interest == 15
 
     def test_transaction_values(self):
+        self.transaction_manager.create_and_execute_transaction(
+            transaction_date=date(2024, 7, 2),
+            portfolio_id=self.portfolio.portfolio_id,
+            template=TransactionTemplate.BUY,
+            portfolio=self.portfolio,
+            product_collection=self.product_collection,
+            currency_prices=self.currency_prices,
+            product_id=1002,
+            amount=1000,
+            price=1.0,
+        )
         transactions = self.portfolio.list_all_transactions()
         cash_movement = transactions[0]['cash_movements']
         security_movement = transactions[0]['security_movements']
