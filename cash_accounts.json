@@ -1,5 +1,0 @@
-[
-  {"portfolio_id": 1, "currency": "EUR", "balance": 50000},
-  {"portfolio_id": 2, "currency": "USD", "balance": 30000},
-  {"portfolio_id": 3, "currency": "EUR", "balance": 75000}
-]

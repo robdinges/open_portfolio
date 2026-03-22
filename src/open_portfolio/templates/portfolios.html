@@ -2,6 +2,14 @@
 {% block title %}Portfolios - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Portfolios</h2>
+<form method="get" style="margin-bottom:1em">
+  <label for="client_id">Kies client:</label>
+  <select name="client_id" id="client_id" onchange="this.form.submit()">
+    {% for c in clients %}
+      <option value="{{ c.client_id }}" {% if selected_client and c.client_id == selected_client.client_id %}selected{% endif %}>{{ c.name }}</option>
+    {% endfor %}
+  </select>
+</form>
 <table>
   <thead>
     <tr><th>ID</th><th>Name</th><th>Client</th><th>Cash Accounts</th></tr>
