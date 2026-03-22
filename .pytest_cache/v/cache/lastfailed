@@ -1,5 +1,8 @@
 {
   "tests/test_transactions.py::TestTransactions::test_transaction_values": true,
   "tests/test_web_app.py::test_transaction_summary_shown": true,
-  "tests/test_web_app.py::test_index_page_contains_portfolio": true
+  "tests/test_web_app.py::test_index_page_contains_portfolio": true,
+  "tests/test_reporting.py::test_realistic_dataset_creation": true,
+  "tests/test_reporting.py::test_portfolio_reporter_summary": true,
+  "tests/test_reporting.py::test_portfolio_reporter_text_export": true
 }
