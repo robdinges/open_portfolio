@@ -1,63 +1,104 @@
 # OpenPortfolio
 
-## Overview
+OpenPortfolio is een modulaire Python-bibliotheek voor het beheren van beleggingsportefeuilles, met ondersteuning voor meerdere valuta, transactietemplates, rapportages, een desktop- en webinterface, en een realistische demo dataset.
 
-OpenPortfolio is a modular Python library for managing investment portfolios
-in memory.  It now includes:
+## Inhoud
 
-* full support for clients, portfolios, cash and securities accounts
-* stock and bond products with pricing and accrued interest
-* multi‑currency handling and FX conversion
-* transaction templates (BUY, SELL, DEPOSIT, DIVIDEND) with simple
-	validation
-* comprehensive reporting tools and a realistic demo dataset generator
-* both a Tkinter desktop GUI and a Flask web UI with immediate transaction
-	summaries
-* lightweight SQLite persistence for clients and portfolios
+- [Snel starten](#snel-starten)
+- [Belangrijkste features](#belangrijkste-features)
+- [Datastructuur & objectmodel](#datastructuur--objectmodel)
+- [Voorbeeld: Realistische dataset](#voorbeeld-realistische-dataset)
+- [Testen & kwaliteit](#testen--kwaliteit)
+- [User interfaces](#user-interfaces)
+- [To do](#to-do)
 
-The core logic lives in ``src/open_portfolio`` and is organised into modules
-for accounts, transactions, products, pricing and analytics.  See
-``GETTING_STARTED.md`` and ``FEATURES.md`` for detailed usage notes,
-architecture overviews, and instructions for running the GUIs and tests.
+---
 
-An old monolithic script ``OpenPortfolioLib.py`` remains for reference but is
-considered legacy; new development should import from ``open_portfolio``.
+## Snel starten
+
+1. **Installeer afhankelijkheden:**
+	```bash
+	pip install -r requirements.txt
+	```
+
+2. **Test de installatie:**
+	```bash
+	./run_tests.sh
+	```
+
+3. **Start de desktop GUI:**
+	```bash
+	PYTHONPATH=src .venv/bin/python3 -m open_portfolio.gui
+	```
+
+4. **Start de webinterface:**
+	```bash
+	PYTHONPATH=src .venv/bin/python3 -m open_portfolio.web_app
+	```
+
+Zie `GETTING_STARTED.md` voor meer details.
+
+---
+
+## Belangrijkste features
+
+- **Modulair & uitbreidbaar:** Accounts, producten, transacties, pricing, analytics, GUI, database.
+- **Meerdere interfaces:** Tkinter desktop GUI, Flask web UI.
+- **Demo data generator:** Realistische datasets voor testen en demo’s.
+- **Transactietemplates:** BUY, SELL, DEPOSIT, DIVIDEND.
+- **Multi-valuta:** EUR, USD, met automatische FX-conversie.
+- **Producten:** Aandelen en obligaties, incl. rente-opbouw en aflossing.
+- **Rapportage:** Overzicht, holdings, transacties, kaspositie.
+- **Database:** SQLite persistence voor clients en portefeuilles.
+- **Testen:** Uitgebreide pytest suite.
+
+Zie `FEATURES.md` voor een volledig overzicht.
+
+---
+
+## Datastructuur & objectmodel
+
+- **Client** → Portefeuilles → CashAccounts & SecuritiesAccount
+- **ProductCollection** → Producten (Stock, Bond)
+- **TransactionManager** → Transacties
+- **CurrencyPrices** → Valutakoersen
+
+Zie `FEATURES.md` voor een diagram en details.
+
+---
+
+## Voorbeeld: Realistische dataset
+
+De functie `create_realistic_dataset()` (zie `sample_data.py`) maakt een volledige demo-omgeving aan met:
+- 2 clients (Alice Johnson, Bob Smith)
+- 3 portefeuilles (EUR/USD)
+- 8 producten (5 aandelen, 3 obligaties)
+- 10 voorbeeldtransacties
+- Realistische prijzen en FX-rates
+
+Zie `DATASET_AND_REPORTING.md` voor details en rapportagevoorbeelden.
+
+---
+
+## Testen & kwaliteit
+
+- Alle kernmodules zijn afgedekt met pytest.
+- Gebruik `./run_tests.sh` voor consistente testuitvoering.
+- Testcases dekken transacties, rapportages, webinterface en meer.
+
+---
+
+## User interfaces
+
+- **Desktop GUI:** Tkinter, direct te starten.
+- **Web UI:** Flask, toont overzicht en transacties.
+- **Notebook & script:** Zie `src/portfolio_sim.ipynb` en `src/portfolio_sim.py` voor een hands-on demo.
+
+---
 
 ## To do
 
-- kosten berekenen
-- spaarrente berekenen
-- vervangen n/a door waarschuwing: geen valuta
-- controle of een instrument klopt bij opvoer:
-
-- inlezen producten
-- inlezen transacties
-- inlezen koersen
-- overal hulptekst toevoegen
-- overal logging toevoegen
-- indeling in classes laten reviewen
-
-- user interface
-- api
-- database gebruiken
-
-## findings:
- - origineel amount en amount omgedraaid
- - transacties met kosten wordt wel uitgevoerd
- - USD rekening niet gevonden, niet naar EUR
-
-## test cases
-
-### aankoop USD aandeel
-
-- met USD-rekening: wordt automatisch alles in USD geboekt (ook kosten)
-- met alleen EUR-rekening: alles wordt omgerekend naar EUR
-- bij omrekening juiste valutakoers (laatst bekende) gebruiken en deze vastleggen bij transactie
-
-### transactie met opgelopen rente
-
-- juiste berekening van de opgelopen rente, ook met meerdere YEAR, END_DATE, ACT_ACT, THIRTY_360
-- aparte boekingsregel
+Zie het README-bestand voor een actuele lijst met openstaande verbeteringen en ideeën.
 
 ### kostenberekening
 

@@ -1,1 +1,5 @@
-{}
+{
+  "tests/test_transactions.py::TestTransactions::test_transaction_values": true,
+  "tests/test_web_app.py::test_transaction_summary_shown": true,
+  "tests/test_web_app.py::test_index_page_contains_portfolio": true
+}

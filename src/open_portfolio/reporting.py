@@ -20,11 +20,97 @@ from typing import List, Optional
 
 
 class PortfolioReporter:
+
     """Generate comprehensive portfolio reports."""
-    
+
     def __init__(self, clients):
         """Initialize reporter with clients."""
         self.clients = clients
+
+    def to_markdown(self, valuation_date: Optional[date] = None) -> str:
+        """Genereer een mooi uitgelijnd markdown rapport van alle portefeuilles."""
+        if valuation_date is None:
+            valuation_date = date.today()
+        lines = []
+        lines.append(f"# Portfolio Rapport\n")
+        lines.append(f"_Valutatiedatum: {valuation_date.strftime('%d %B %Y')}_\n")
+
+        # Samenvatting
+        lines.append("## Samenvatting per client\n")
+        for client in self.clients:
+            lines.append(f"### {client.name} (ID: {client.client_id})\n")
+            for portfolio in client.portfolios:
+                try:
+                    value = portfolio.calculate_holding_value(valuation_date)
+                    cash_total = sum(acc.get_balance(valuation_date) for acc in portfolio.cash_accounts.values())
+                    sec_value = value - cash_total
+                    lines.append(f"- **Portfolio {portfolio.portfolio_id} ({portfolio.name})**: {portfolio.default_currency} {value:,.2f}  ")
+                    lines.append(f"  - Cash: {portfolio.default_currency} {cash_total:,.2f}  ")
+                    lines.append(f"  - Effecten: {portfolio.default_currency} {sec_value:,.2f}\n")
+                except Exception as e:
+                    lines.append(f"- Portfolio {portfolio.portfolio_id}: _Error: {e}_\n")
+
+        # Holdings
+        lines.append("## Gedetailleerde holdings\n")
+        for client in self.clients:
+            lines.append(f"### {client.name}\n")
+            for portfolio in client.portfolios:
+                lines.append(f"#### Portfolio {portfolio.portfolio_id} - {portfolio.name}\n")
+                # Cash accounts
+                lines.append("**Kasposities:**\n")
+                lines.append("| Account ID | Valuta | Type | Saldo |")
+                lines.append("|---|---|---|---:|")
+                for (acct_id, curr, acc_type), account in portfolio.cash_accounts.items():
+                    balance = account.get_balance(valuation_date)
+                    lines.append(f"| {acct_id} | {curr} | {acc_type.name} | {balance:,.2f} |")
+                lines.append("")
+                # Securities
+                if portfolio.securities_account.holdings:
+                    lines.append("**Effecten:**\n")
+                    lines.append("| Product ID | Omschrijving | Aantal | Prijs | Waarde |")
+                    lines.append("|---|---|---:|---:|---:|")
+                    for holding in portfolio.securities_account.holdings:
+                        product = holding["product"]
+                        amount = 0
+                        for tx in product.transactions:
+                            for mv in tx.security_movements:
+                                if mv.transaction_date <= valuation_date:
+                                    from .enums import MovementType
+                                    if mv.movement_type == MovementType.SECURITY_BUY:
+                                        amount += mv.amount_nominal
+                                    elif mv.movement_type == MovementType.SECURITY_SELL:
+                                        amount -= mv.amount_nominal
+                        if amount > 0:
+                            price = product.get_price(valuation_date) or 0.0
+                            value = amount * price
+                            lines.append(f"| {getattr(product, 'instrument_id', getattr(product, 'product_id', '-'))} | {product.description} | {amount:.0f} | {price:,.2f} | {value:,.2f} |")
+                    lines.append("")
+                else:
+                    lines.append("_Geen effecten_\n")
+
+        # Transacties
+        lines.append("## Transactiegeschiedenis\n")
+        for client in self.clients:
+            lines.append(f"### {client.name}\n")
+            for portfolio in client.portfolios:
+                lines.append(f"#### Portfolio {portfolio.portfolio_id} - {portfolio.name}\n")
+                lines.append("| Datum | Type | Product | Aantal | Prijs | Waarde |")
+                lines.append("|---|---|---|---:|---:|---:|")
+                transactions = portfolio.list_all_transactions()
+                if not transactions:
+                    lines.append("| _Geen transacties_ |  |  |  |  |  |")
+                else:
+                    for tx in transactions:
+                        for sm in tx.get('security_movements', []):
+                            product_desc = f"[{sm['product_id']}]"
+                            amount = sm.get('amount_nominal', 0)
+                            price = sm.get('price', 0)
+                            value = amount * price
+                            tx_type = sm.get('type', 'UNKNOWN')
+                            lines.append(f"| {tx['transaction_date']} | {tx_type} | {product_desc} | {amount:.0f} | {price:,.2f} | {value:,.2f} |")
+                lines.append("")
+
+        return "\n".join(lines)
     
     def print_summary(self, valuation_date: Optional[date] = None):
         """Print brief summary of all portfolios."""

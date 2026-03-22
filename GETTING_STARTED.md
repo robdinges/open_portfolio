@@ -1,62 +1,55 @@
-# OpenPortfolio – Getting Started Guide
+# OpenPortfolio – Getting Started
 
-This guide explains how to set up, run, and use the OpenPortfolio library and its graphical interfaces.
+Deze gids helpt je om snel aan de slag te gaan met OpenPortfolio en de grafische interfaces.
 
-## Quick Setup
+## Snel starten
 
-1. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Verify installation:**
+1. **Installeer afhankelijkheden:**
     ```bash
-    cd /Users/robvandererve/Documents/python_projects/OpenPortfolio
-    PYTHONPATH=src .venv/bin/python3 -m pytest tests/ -v
+    pip install -r requirements.txt
     ```
-    The suite currently contains 16 tests and they should all pass.
 
----
+2. **Test de installatie:**
+    ```bash
+    ./run_tests.sh
+    ```
 
-## Running the Desktop GUI
+3. **Start de desktop GUI:**
+    ```bash
+    PYTHONPATH=src .venv/bin/python3 -m open_portfolio.gui
+    ```
 
-The desktop GUI is a lightweight Tkinter application for managing portfolios, viewing holdings, and executing transactions.
+4. **Start de webinterface:**
+    ```bash
+    PYTHONPATH=src .venv/bin/python3 -m open_portfolio.web_app
+    ```
 
-### Basic Usage
+## GUI Gebruik
 
+**Desktop GUI (Tkinter):**
+- Portefeuilles beheren, holdings bekijken, transacties uitvoeren.
+- Tabblad "Transactions": selecteer portefeuille, type, product, bedrag, prijs en klik op Execute.
+- Tabblad "Overview": toont kas- en effectenposities.
+
+**Web UI (Flask):**
+- Overzicht van portefeuilles, transacties en posities via de browser.
+
+## Demo modus
+
+Start met voorbeelddata:
 ```bash
-cd /Users/robvandererve/Documents/python_projects/OpenPortfolio
-PYTHONPATH=src .venv/bin/python3 -m open_portfolio.gui
-```
-
-This launches the interactive GUI. Use the **Transactions** tab to:
-- Select a portfolio
-- Choose a transaction type (BUY, SELL, DEPOSIT, DIVIDEND)
-- Pick a product from the dropdown
-- Enter amount and price
-- Click **Execute** to process the transaction
-
-The **Overview** tab shows:
-- Cash account balances for each portfolio
-- Current security holdings
-
-### Demo Mode
-
-To start with sample products and currency prices:
-
-```bash
-cd /Users/robvandererve/Documents/python_projects/OpenPortfolio
 PYTHONPATH=src .venv/bin/python3 -m open_portfolio.gui --demo
 ```
+Of voor de webinterface:
+```bash
+PYTHONPATH=src .venv/bin/python3 -m open_portfolio.web_app
+```
 
-Demo data includes:
-- **Stock**: Demo USD Stock (ID 1001)
-- **Bond**: Demo EUR Bond (ID 1002)
-- **Currency rates**: USD/EUR conversion at 1.10
+Demo data bevat o.a. een USD aandeel, EUR obligatie en actuele valutakoersen.
 
-### Headless Mode (for Testing)
+## Notebook & script
 
-To verify the GUI initializes without displaying it:
+Zie `src/portfolio_sim.ipynb` (interactief) en `src/portfolio_sim.py` (script) voor een hands-on demo van de kernfunctionaliteit.
 
 ```bash
 PYTHONPATH=src .venv/bin/python3 -m open_portfolio.gui --headless --demo

@@ -1,38 +1,24 @@
 # OpenPortfolio Features & Data Model
 
-This document gives a quick reference to the capabilities of the
-OpenPortfolio library and an overview of the underlying object model so
-that you can pick things up quickly in future sessions.
+Dit document geeft een overzicht van de belangrijkste mogelijkheden en de datastructuur van OpenPortfolio.
 
-## High‑Level Features
+## Features
 
-- **Modular, extensible codebase** with separate packages for each
-  concern (accounts, clients, products, transactions, pricing, GUI,
-  reporting, database).
-- **Multiple user interfaces**:
-  - Desktop GUI built with Tkinter (`gui.py`)
-  - Web GUI built with Flask (`web_app.py`)
-- **Auto‑generated demo data** and a richer realistic dataset
-  generator (`sample_data.py`).
-- **Transaction templates** covering common operations:
-  BUY, SELL, DEPOSIT, DIVIDEND.  Templates simplify input and validation.
-- **Multi‑currency support** including cash accounts denominated in EUR
-  and USD with exchange rate handling.
-- **Products** cover both stocks and bonds; bonds include interest
-  accrual and maturity date logic.
-- **Reporting module** (`reporting.py`) produces summary, holdings,
-  transaction history and cash position reports, either printed to
-  console or exported as plain text.
-- **Web UI enhancements**: after each transaction the page displays the
-  last 5 trades, current positions and cash balances.
-- **Database persistence**: lightweight SQLite wrapper (`database.py`) for
-  clients and portfolios with simple read/write methods.
-- **Comprehensive testing**: 15 pytest cases validate core logic,
-  reporting and web UI behaviour.
-- **CLI tools & demo modes**: headless GUI, demo web server, and scriptable
-  dataset/report generation.
+- **Modulair & uitbreidbaar:** Accounts, clients, producten, transacties, pricing, GUI, rapportage, database.
+- **Meerdere user interfaces:**
+  - Desktop GUI (Tkinter)
+  - Web GUI (Flask)
+- **Demo data generator:** Automatisch realistische datasets voor testen en demo’s.
+- **Transactietemplates:** BUY, SELL, DEPOSIT, DIVIDEND (met validatie).
+- **Multi-valuta:** EUR, USD, automatische FX-conversie.
+- **Producten:** Aandelen en obligaties (incl. rente-opbouw, aflossing).
+- **Rapportage:** Overzicht, holdings, transacties, kaspositie (console of tekstbestand).
+- **Web UI:** Laatste 5 transacties, actuele posities en kas direct zichtbaar.
+- **Database:** SQLite persistence voor clients en portefeuilles.
+- **Testen:** Uitgebreide pytest suite.
+- **CLI & demo:** Headless GUI, demo webserver, scriptbare dataset/report generatie.
 
-## Object Model Overview
+## Objectmodel (vereenvoudigd)
 
 ```
 Client
@@ -57,7 +43,12 @@ SecuritiesAccount
   ├─ holdings: each contains product and amount
   └─ calculate values for holdings as of a date
 
-Product (base)
+Product (Stock/Bond)
+  ├─ product_id/instrument_id, description, currency
+  ├─ minimum_purchase_value, smallest_trading_unit
+  └─ (voor Bond: interest, maturity, payment_frequency)
+
+Zie de code en docstrings voor meer details.
   ├─ instrument_id, description, issue_currency
   ├─ minimum_purchase_value, smallest_trading_unit
   ├─ transactions: list of security movements
