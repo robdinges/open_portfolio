@@ -1,0 +1,5 @@
+[
+  {"portfolio_id": 1, "client_id": 1, "name": "Groei Europa", "default_currency": "EUR"},
+  {"portfolio_id": 2, "client_id": 1, "name": "Tech Amerika", "default_currency": "USD"},
+  {"portfolio_id": 3, "client_id": 2, "name": "Obligaties NL", "default_currency": "EUR"}
+]

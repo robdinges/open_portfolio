@@ -1,73 +1,174 @@
-# Bond Workspace
+# OpenPortfolio
 
-Streamlit-app voor obligatiebeheer met persistente SQLite-opslag, transactiereconciliatie en transparante SELL-vs-HOLD analyse.
+OpenPortfolio is een modulaire Python-bibliotheek voor het beheren van beleggingsportefeuilles, met ondersteuning voor meerdere valuta, transactietemplates, rapportages, een desktop- en webinterface, en een realistische demo dataset.
 
-## Huidige indeling
+## Inhoud
 
-- `app.py`  
-  Hoofdapp met schermen: `Transactie-overzicht`, `Obligatie-tijdlijn`, `Koersen`, `Analyse`, `Onderhoud obligaties`.
-- `OpenPortfolioLib.py`  
-  Portefeuille- en transactiekern.
-- `src/bond_suite/`  
-  Geconsolideerde package (engine + analytics wrappers), inclusief beslismodule `bond_decision_analysis.py`.
-- `data/portfolio.db`  
-  SQLite database (automatisch aangemaakt).
+- [Snel starten](#snel-starten)
+- [Belangrijkste features](#belangrijkste-features)
+- [Datastructuur & objectmodel](#datastructuur--objectmodel)
+- [Voorbeeld: Realistische dataset](#voorbeeld-realistische-dataset)
+- [Testen & kwaliteit](#testen--kwaliteit)
+- [User interfaces](#user-interfaces)
+- [To do](#to-do)
 
-## Installatie
+---
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+## Snel starten
 
-## Gebruik
+1. **Installeer afhankelijkheden:**
+	```bash
+	pip install -r requirements.txt
+	```
 
-```bash
-streamlit run app.py
-```
+2. **Test de installatie:**
+	```bash
+	./run_tests.sh
+	```
 
-## Persistente opslag
+3. **Start de desktop GUI:**
+	```bash
+	PYTHONPATH=src .venv/bin/python3 -m open_portfolio.gui
+	```
 
-SQLite in `data/portfolio.db` met tabellen:
+4. **Start de webinterface:**
+	```bash
+	PYTHONPATH=src .venv/bin/python3 -m open_portfolio.web_app
+	```
 
-- `instruments`
-- `accounts`
-- `transactions`
-- `bond_prices`
-- `fx_rates`
-- `import_log`
+Zie `GETTING_STARTED.md` voor meer details.
 
-Transactie-import is idempotent via unieke `tx_key`.
+---
 
-## Belangrijkste functionaliteit
+## Belangrijkste features
 
-- **Multi-file import** met automatische typeherkenning (transacties vs positie/koersen).
-- **Liquiditeiten/effecten-koppeling op referentie**; brokerbedrag komt uit liquiditeitenregel.
-- **Transactieformules volgens notes** met vergelijking brokerbedrag vs formulebedrag en verschillenlijst.
-- **0,1% transactiekostenregel** toegepast op aankoop/verkoop-berekeningen.
-- **Opgelopen rente verwerkt** (EUR-basis) inclusief fallback-afleiding uit brokerbedrag.
-- **Couponregels genormaliseerd**: `tx_currency = EUR`, `fx_rate = 1.0`.
-- **Transactie-overzicht (excel stijl)** met edit/save, soft delete en verschilmonitoring.
-- **Tijdelijke DB-resetknop** in UI voor testdoeleinden.
-- **Instrumentverrijking bij transacties**:
-  - valuta uit `Transactiebedrag valuta`,
-  - couponpercentage uit naampatroon `(x,xx%)`,
-  - einddatum uit naampatroon `dd-mm-jjjj`.
-- **Analyse “Verkoop Nu”** houdt rekening met meeverkochte rente en additionele 0,1% verkoopkosten.
-- **SELL vs HOLD beslismodule** (`BondPosition`, `BondCalculator`) met cashflows vanaf vandaag en discounting naar vandaag.
-- **Scenariovergelijking** voor verkoopprijsband `current_price ±0,5%` plus HOLD tot maturity.
-- **Transparante analysetabellen**: inputdata, sale calculation, coupon schedule, discounted cashflows, final comparison.
-- **3D-opbrengstgrafiek in Analyse**:
-  - X-as: huidige verkoopprijs `±1,0%` (stap `0,1%`),
-  - Y-as: discount `%` van `0` tot `5` (stap `0,1%`),
-  - Z-as: opbrengstverschil `HOLD - SELL` in EUR.
+- **Modulair & uitbreidbaar:** Accounts, producten, transacties, pricing, analytics, GUI, database.
+- **Meerdere interfaces:** Tkinter desktop GUI, Flask web UI.
+- **Demo data generator:** Realistische datasets voor testen en demo’s.
+- **Transactietemplates:** BUY, SELL, DEPOSIT, DIVIDEND.
+- **Multi-valuta:** EUR, USD, met automatische FX-conversie.
+- **Producten:** Aandelen en obligaties, incl. rente-opbouw en aflossing.
+- **Rapportage:** Overzicht, holdings, transacties, kaspositie.
+- **Database:** SQLite persistence voor clients en portefeuilles.
+- **Testen:** Uitgebreide pytest suite.
 
-## Ontwikkelgebruik
+Zie `FEATURES.md` voor een volledig overzicht.
 
-```python
-from bond_suite import Client, ProductCollection, TransactionManager, PortfolioBond, resultaten_tabel
+---
 
-# Beslisanalyse
-from bond_suite import BondPosition, BondCalculator, compare_scenarios
-```
+## Datastructuur & objectmodel
+
+- **Client** → Portefeuilles → CashAccounts & SecuritiesAccount
+- **ProductCollection** → Producten (Stock, Bond)
+- **TransactionManager** → Transacties
+- **CurrencyPrices** → Valutakoersen
+
+Zie `FEATURES.md` voor een diagram en details.
+
+---
+
+## Voorbeeld: Realistische dataset
+
+De functie `create_realistic_dataset()` (zie `sample_data.py`) maakt een volledige demo-omgeving aan met:
+- 2 clients (Alice Johnson, Bob Smith)
+- 3 portefeuilles (EUR/USD)
+- 8 producten (5 aandelen, 3 obligaties)
+- 10 voorbeeldtransacties
+- Realistische prijzen en FX-rates
+
+Zie `DATASET_AND_REPORTING.md` voor details en rapportagevoorbeelden.
+
+---
+
+## Testen & kwaliteit
+
+- Alle kernmodules zijn afgedekt met pytest.
+- Gebruik `./run_tests.sh` voor consistente testuitvoering.
+- Testcases dekken transacties, rapportages, webinterface en meer.
+
+---
+
+## User interfaces
+
+- **Desktop GUI:** Tkinter, direct te starten.
+- **Web UI:** Flask, toont overzicht en transacties.
+- **Notebook & script:** Zie `src/portfolio_sim.ipynb` en `src/portfolio_sim.py` voor een hands-on demo.
+
+---
+
+## To do
+
+Zie het README-bestand voor een actuele lijst met openstaande verbeteringen en ideeën.
+
+### kostenberekening
+
+- juiste berekening indien niet opgegeven
+- juiste overname opgegeven bedrag
+- boeken in juiste valuta, met juiste teken (+/-)
+
+### buying power
+
+- altijd bepalen tov de rekening waarop wordt afgerekend
+- afwijzen bij onvoldoende saldo
+- ook afwijzen als het eerste deel juist is (bijv wel voldoende voor aankoop, niet meer voor kosten)
+- stukken controleren bij verkoop
+- bij verwerking transactie: alles of niets
+
+### aanmaken rekening
+
+- controleren of een rekening van hetzelfde type en in zelfde valuta al bestaat
+- standaard de automatisch geopende rekening gebruiken
+- rekeningen krijgen altijd hetzelfde nummmer als de portfolio, niet zelf te kiezen
+
+### ordercontroles
+
+- rekening houden met min transactie-aantal en unit, ook voor fracties
+- rekening houde met start en einddatum van producten
+- controleer of alles bestaat: portfolio, product etc
+
+### holdings
+
+- holding per valutadatum kloppend
+- juiste berekening rendement holding en portfolio
+- juiste vermelding opgelopen rente
+- gemiddelde aankoopprijs
+- obligaties: ytm, duration
+
+## kalender
+Ptf 10, rek EUR, 15.000
+Ptf 10, rek USD, 5.000
+Ptf 10, rek GBP, 1.000
+Ptf 20, rek EUR, 10.000
+
+Koersen USD-EUR: ... voor alle data en maandultimo
+
+bond1: 01-01-2024 - 31-12-2024, EUR, 5%, ACT_ACT, YEAR
+bond2: 01-11-2022 - 31-10-2032, USD, 3%, 30_360, YEAR
+bond3: 01-01-2020 - 31-12-2025, EUR, 4%, ACT_ACT, END_DATE
+stock1: GBP,
+stock2: (fund), EUR, 0.001,
+
+koersen bond1, bond2, bond3, stock1, stock2 voor alle data en maandultimo
+
+jan 2024
+ - 30-01-2024: aankoop bond1 via EUR-rekening 10: 5000
+
+feb 2024
+ - 15-02-2024: aankoop stock1 via GBP-rekening 10: 10 @ 100 --> alleen aankoop past in buying power
+ - 20-02-2024: aankoop stock2 via EUR-rekening 10: 1.2345 @ 20 --> afwijzing
+ - 25-02-2024: aankoop stock2 via EUR-rekening 10: 1.234 @ 20 --> akkoord 
+ - 28-02-2024: aankoop bond3 via EUR-rekening 10: 1000 --> opgelopen rente vanaf start
+
+mrt 2024
+ - 15-03-2024: aankoop stock1 via GBP-rekening 10: 5 @ 100 --> geaccepteerd
+ - 31-03-2024: aankoop bond2 via USD-rekening 10: 2000 --> opgelopen rente 30 apr, alles in USD
+ - 31-03-2024: aankoop bond2 via EUR-rekening 20: 4000 --> opgelopen rente 30 apr, alles in EUR
+apr 2024
+ - 15-04-2024: verkoop stock1 via GBP-rekening 10: 6 @ 110 --> afwijzing wegens onvoldoende stukken
+ - 20-04-2024: verkoop stock1 via GBP-rekening 10: 4 @ 110 --> akkoord
+ - 30-04-2024: verkoop bond2 via USD-rekening 10: 1000 --> alles in USD
+ - 31-03-2024: verkoop bond2 via EUR-rekening 20: 2000 --> alles in EUR
+
+jan 2025
+ - 15-01-2025: aankoop bond1 via EUR-rekening 10: 1000 --> afwijzing vanwege einddatum
+>>>>>>> openPtf
