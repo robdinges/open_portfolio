@@ -60,7 +60,7 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         for prod in products_list:
             product_collection.add_product(prod)
     else:
-        clients = [client]
+        clients = client if isinstance(client, list) else [client]
 
     app = Flask(__name__)
     tx_manager = TransactionManager()
@@ -211,22 +211,23 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         # Verzamel alle cash accounts van alle portefeuilles
         selected_client_id = request.args.get("client_id", type=int)
         selected_client = None
-        for c in clients:
-            if selected_client_id and c.client_id == selected_client_id:
-                selected_client = c
-                break
-        if not selected_client:
-            selected_client = clients[0]
+        if selected_client_id:
+            for c in clients:
+                if c.client_id == selected_client_id:
+                    selected_client = c
+                    break
         accounts = []
-        for p in selected_client.portfolios:
-            if hasattr(p, 'cash_accounts'):
-                for (aid, curr, atype), acc in p.cash_accounts.items():
-                    acc.aid = aid
-                    acc.curr = curr
-                    acc.atype = atype
-                    acc.portfolio = p
-                    accounts.append(acc)
-        return render_template("accounts.html", accounts=accounts, clients=clients, selected_client=selected_client)
+        source_clients = [selected_client] if selected_client else clients
+        for cl in source_clients:
+            for p in cl.portfolios:
+                if hasattr(p, 'cash_accounts'):
+                    for (aid, curr, atype), acc in p.cash_accounts.items():
+                        acc.aid = aid
+                        acc.curr = curr
+                        acc.atype = atype
+                        acc.portfolio = p
+                        accounts.append(acc)
+        return render_template("accounts.html", accounts=accounts, clients=clients, selected_client=selected_client, format_currency=format_currency)
 
     @app.route("/instruments")
     def instruments_page():
