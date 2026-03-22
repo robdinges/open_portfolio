@@ -120,17 +120,22 @@ def make_app(client=None, product_collection=None, currency_prices=None):
     def transactions():
         selected_client_id = request.args.get("client_id", type=int)
         selected_client = None
+        all_transactions = []
         if selected_client_id:
             for c in clients:
                 if c.client_id == selected_client_id:
                     selected_client = c
                     break
-        if not selected_client:
-            selected_client = clients[0]
-        all_transactions = []
-        for p in selected_client.portfolios:
-            if hasattr(p, 'transactions'):
-                all_transactions.extend(p.transactions)
+            if selected_client:
+                for p in selected_client.portfolios:
+                    if hasattr(p, 'transactions'):
+                        all_transactions.extend(p.transactions)
+        else:
+            # Verzamel transacties van alle clients
+            for c in clients:
+                for p in c.portfolios:
+                    if hasattr(p, 'transactions'):
+                        all_transactions.extend(p.transactions)
         return render_template("transactions.html", transactions=all_transactions, format_currency=format_currency, clients=clients, selected_client=selected_client)
 
     # Verwijderd: dubbele lege functie new_transaction()
@@ -143,11 +148,11 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             selected_template = request.form.get("template")
             selected_product_id = request.form.get("product_id")
         else:
-            selected_client_id = clients[0].client_id
-            selected_client = clients[0]
-            selected_portfolio_id = selected_client.portfolios[0].portfolio_id if selected_client.portfolios else 0
-            selected_template = None
-            selected_product_id = None
+            selected_client_id = int(request.args.get("client_id", clients[0].client_id))
+            selected_client = next((c for c in clients if c.client_id == selected_client_id), clients[0])
+            selected_portfolio_id = int(request.args.get("portfolio_id", selected_client.portfolios[0].portfolio_id if selected_client.portfolios else 0))
+            selected_template = request.args.get("template")
+            selected_product_id = request.args.get("product_id")
         selected_portfolio = None
         for p in selected_client.portfolios:
             if p.portfolio_id == selected_portfolio_id:

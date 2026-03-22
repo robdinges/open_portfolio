@@ -1,5 +1,5 @@
 [
-  {"product_id": 1, "name": "Apple Inc.", "type": "stock", "minimum_purchase_value": 100, "smallest_trading_unit": 1, "issue_currency": "USD"},
+  {"product_id": 1, "name": "Apple Inc. (AAPL)", "type": "stock", "minimum_purchase_value": 100, "smallest_trading_unit": 1, "issue_currency": "USD"},
   {"product_id": 2, "name": "Microsoft Corp.", "type": "stock", "minimum_purchase_value": 100, "smallest_trading_unit": 1, "issue_currency": "USD"},
   {"product_id": 3, "name": "Alphabet Inc.", "type": "stock", "minimum_purchase_value": 100, "smallest_trading_unit": 1, "issue_currency": "USD"},
   {"product_id": 4, "name": "Amazon.com Inc.", "type": "stock", "minimum_purchase_value": 100, "smallest_trading_unit": 1, "issue_currency": "USD"},
@@ -7,4 +7,5 @@
   {"product_id": 101, "name": "Nederlandse Staat 2030", "type": "bond", "minimum_purchase_value": 1000, "smallest_trading_unit": 1, "issue_currency": "EUR", "start_date": "2020-01-01", "maturity_date": "2030-01-01", "interest_rate": 0.025, "interest_payment_frequency": "YEAR"},
   {"product_id": 102, "name": "Rabobank 2027", "type": "bond", "minimum_purchase_value": 1000, "smallest_trading_unit": 1, "issue_currency": "EUR", "start_date": "2022-06-15", "maturity_date": "2027-06-15", "interest_rate": 0.035, "interest_payment_frequency": "YEAR"},
   {"product_id": 103, "name": "US Treasury 2033", "type": "bond", "minimum_purchase_value": 1000, "smallest_trading_unit": 1, "issue_currency": "USD", "start_date": "2023-01-01", "maturity_date": "2033-01-01", "interest_rate": 0.04, "interest_payment_frequency": "YEAR"}
+  ,{"product_id": 104, "name": "EU Government Bond 2.5%", "type": "bond", "minimum_purchase_value": 1000, "smallest_trading_unit": 1, "issue_currency": "EUR", "start_date": "2020-01-01", "maturity_date": "2030-01-01", "interest_rate": 0.025, "interest_payment_frequency": "YEAR"}
 ]

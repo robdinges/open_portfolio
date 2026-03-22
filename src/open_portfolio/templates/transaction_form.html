@@ -56,7 +56,7 @@
     <select name="cash_account" id="cash_account" required>
       {% for acc in cash_accounts %}
         <option value="{{ acc.aid }}" {% if acc.aid == selected_cash_account %}selected{% endif %}>
-          {{ acc.aid }} ({{ acc.curr }}, saldo: {{ acc.balance }})
+          {{ acc.aid }} ({{ acc.curr }}, saldo: {{ format_currency(acc.balance, acc.curr) }})
         </option>
       {% endfor %}
     </select>
