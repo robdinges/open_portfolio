@@ -13,7 +13,7 @@
 </form>
 <table>
   <thead>
-    <tr><th>ID</th><th>Name</th><th>Client</th><th>Cash Accounts</th></tr>
+    <tr><th>ID</th><th>Name</th><th>Client</th><th>Cash Accounts</th><th>Acties</th></tr>
   </thead>
   <tbody>
     {% for p in portfolios %}
@@ -25,6 +25,9 @@
         {% for (aid, curr, atype), acc in p.cash_accounts.items() %}
           {{ aid }} ({{ curr }}, {{ atype.name }}){% if not loop.last %}, {% endif %}
         {% endfor %}
+      </td>
+      <td>
+        <a class="button" href="/transactions/new?client_id={{ p.client.client_id }}&portfolio_id={{ p.portfolio_id }}">Nieuwe transactie</a>
       </td>
     </tr>
     {% endfor %}
