@@ -65,99 +65,160 @@ def make_app(client=None, product_collection=None, currency_prices=None):
     app = Flask(__name__)
     tx_manager = TransactionManager()
 
+    def resolve_context(client_id=None, portfolio_id=None):
+        selected_client = None
+        if client_id:
+            selected_client = next((c for c in clients if c.client_id == client_id), None)
+        if selected_client is None:
+            selected_client = clients[0]
+
+        selected_portfolio = None
+        if portfolio_id:
+            selected_portfolio = next((p for p in selected_client.portfolios if p.portfolio_id == portfolio_id), None)
+        if selected_portfolio is None and selected_client.portfolios:
+            selected_portfolio = selected_client.portfolios[0]
+
+        return selected_client, selected_portfolio
+
+    def nav_query(selected_client, selected_portfolio):
+        parts = []
+        if selected_client:
+            parts.append(f"client_id={selected_client.client_id}")
+        if selected_portfolio:
+            parts.append(f"portfolio_id={selected_portfolio.portfolio_id}")
+        return f"?{'&'.join(parts)}" if parts else ""
+
     @app.route("/holdings")
     def holdings_page():
         selected_client_id = request.args.get("client_id", type=int)
-        selected_client = None
-        portfolios = []
-        if selected_client_id:
-            for c in clients:
-                if c.client_id == selected_client_id:
-                    selected_client = c
-                    break
-            if selected_client:
-                portfolios = selected_client.portfolios
-        else:
-            # Verzamel alle portfolios van alle clients
-            for c in clients:
-                for p in c.portfolios:
-                    portfolios.append(p)
         selected_portfolio_id = request.args.get("portfolio_id", type=int)
-        selected_portfolio = None
-        for p in portfolios:
-            if selected_portfolio_id and p.portfolio_id == selected_portfolio_id:
-                selected_portfolio = p
-                break
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
         return render_template(
             "holdings.html",
-            portfolios=portfolios,
             selected_portfolio=selected_portfolio,
             selected_client=selected_client,
-            clients=clients,
-            format_currency=format_currency
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            format_currency=format_currency,
+            active_page="holdings",
         )
 
     @app.route("/")
     def home():
         selected_client_id = request.args.get("client_id", type=int)
-        selected_client = None
-        if selected_client_id:
-            for c in clients:
-                if c.client_id == selected_client_id:
-                    selected_client = c
-                    break
-        else:
-            selected_client = clients[0]
-        show_transaction_button = selected_client is not None
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
         return render_template(
             "home.html",
             clients=clients,
             selected_client=selected_client,
-            format_currency=format_currency
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            format_currency=format_currency,
+            active_page="home",
         )
 
     @app.route("/transactions")
     def transactions():
         selected_client_id = request.args.get("client_id", type=int)
-        selected_client = None
-        all_transactions = []
-        if selected_client_id:
-            for c in clients:
-                if c.client_id == selected_client_id:
-                    selected_client = c
-                    break
-            if selected_client:
-                for p in selected_client.portfolios:
-                    if hasattr(p, 'transactions'):
-                        all_transactions.extend(p.transactions)
-        else:
-            # Verzamel transacties van alle clients
-            for c in clients:
-                for p in c.portfolios:
-                    if hasattr(p, 'transactions'):
-                        all_transactions.extend(p.transactions)
-        return render_template("transactions.html", transactions=all_transactions, format_currency=format_currency, clients=clients, selected_client=selected_client)
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+        all_transactions = selected_portfolio.list_all_transactions() if selected_portfolio else []
+        return render_template(
+            "transactions.html",
+            transactions=all_transactions,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            format_currency=format_currency,
+            active_page="transactions",
+        )
 
     # Verwijderd: dubbele lege functie new_transaction()
     @app.route("/transactions/new", methods=["GET", "POST"])
     def new_transaction():
+        error = None
+        success_message = None
         if request.method == "POST":
             selected_client_id = int(request.form.get("client_id", clients[0].client_id))
-            selected_client = next((c for c in clients if c.client_id == selected_client_id), clients[0])
-            selected_portfolio_id = int(request.form.get("portfolio_id", selected_client.portfolios[0].portfolio_id if selected_client.portfolios else 0))
+            selected_portfolio_id = int(request.form.get("portfolio_id", 0))
+            selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
             selected_template = request.form.get("template")
             selected_product_id = request.form.get("product_id")
+            return_to = request.form.get("return_to", "")
+
+            if request.form.get("cancel") == "1":
+                if return_to == "holdings":
+                    return redirect(url_for("holdings_page", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+                return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+
+            if request.form.get("save") == "1":
+                try:
+                    if selected_portfolio is None:
+                        raise ValueError("Geen portefeuille geselecteerd")
+                    template = TransactionTemplate[selected_template]
+                    product_id = int(selected_product_id)
+                    amount = float(request.form.get("amount", "0"))
+                    price = float(request.form.get("price", "0"))
+
+                    if amount <= 0:
+                        raise ValueError("Aantal moet groter zijn dan 0")
+                    if price < 0:
+                        raise ValueError("Prijs kan niet negatief zijn")
+
+                    if template == TransactionTemplate.SELL:
+                        holding = next((
+                            h for h in selected_portfolio.securities_account.holdings
+                            if (
+                                (isinstance(h, dict) and h.get("product") and h["product"].instrument_id == product_id)
+                                or (not isinstance(h, dict) and getattr(getattr(h, "product", None), "instrument_id", None) == product_id)
+                            )
+                        ), None)
+                        if isinstance(holding, dict):
+                            available_amount = float(holding.get("amount", 0.0))
+                        else:
+                            available_amount = float(getattr(holding, "amount", 0.0)) if holding is not None else 0.0
+                        if amount > available_amount:
+                            raise ValueError("Onvoldoende positie voor verkoop")
+
+                    tx_manager.create_and_execute_transaction(
+                        transaction_date=date.today(),
+                        portfolio_id=selected_portfolio.portfolio_id,
+                        template=template,
+                        portfolio=selected_portfolio,
+                        product_collection=product_collection,
+                        currency_prices=currency_prices,
+                        product_id=product_id,
+                        amount=amount,
+                        price=price,
+                    )
+                    success_message = "Transactie succesvol opgeslagen"
+                    if return_to == "holdings":
+                        return redirect(url_for("holdings_page", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+                    return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+                except Exception as exc:
+                    error = str(exc)
         else:
             selected_client_id = int(request.args.get("client_id", clients[0].client_id))
-            selected_client = next((c for c in clients if c.client_id == selected_client_id), clients[0])
-            selected_portfolio_id = int(request.args.get("portfolio_id", selected_client.portfolios[0].portfolio_id if selected_client.portfolios else 0))
+            fallback_portfolio_id = clients[0].portfolios[0].portfolio_id if clients and clients[0].portfolios else 0
+            selected_portfolio_id = int(request.args.get("portfolio_id", fallback_portfolio_id))
+            selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
             selected_template = request.args.get("template")
             selected_product_id = request.args.get("product_id")
-        selected_portfolio = None
-        for p in selected_client.portfolios:
-            if p.portfolio_id == selected_portfolio_id:
-                selected_portfolio = p
-                break
+        if selected_product_id:
+            try:
+                selected_product_id = int(selected_product_id)
+            except Exception:
+                pass
+        if request.method != "POST":
+            return_to = request.args.get("return_to", "")
+        if request.method == "POST" and 'return_to' not in locals():
+            return_to = request.form.get("return_to", "")
         cash_accounts = []
         if selected_portfolio and hasattr(selected_portfolio, 'cash_accounts'):
             for (aid, curr, atype), acc in selected_portfolio.cash_accounts.items():
@@ -168,7 +229,8 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         return render_template(
             "transaction_form.html",
             clients=clients,
-            portfolios=selected_client.portfolios,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
             templates=[t for t in TransactionTemplate],
             products=product_collection.products,
             selected_client_id=selected_client_id,
@@ -178,65 +240,88 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             cash_accounts=cash_accounts,
             show_amount=True,
             amount_label=None,
-            format_currency=format_currency
+            format_currency=format_currency,
+            error=error,
+            success_message=success_message,
+            return_to=return_to,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            active_page="transactions",
         )
 
     @app.route("/clients")
     def clients_page():
-        return render_template("clients.html", clients=clients)
+        selected_client_id = request.args.get("client_id", type=int)
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+        return render_template(
+            "home.html",
+            clients=clients,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            format_currency=format_currency,
+            active_page="home",
+        )
 
     @app.route("/portfolios")
     def portfolios_page():
-        # Verzamel alle portefeuilles van deze client
-        # Zorg dat elke portfolio een client attribuut heeft
         selected_client_id = request.args.get("client_id", type=int)
-        selected_client = None
-        portfolios = []
-        if selected_client_id:
-            for c in clients:
-                if c.client_id == selected_client_id:
-                    selected_client = c
-                    break
-            if selected_client:
-                portfolios = selected_client.portfolios
-                for p in portfolios:
-                    if not hasattr(p, 'client'):
-                        p.client = selected_client
-        else:
-            # Verzamel alle portfolios van alle clients
-            for c in clients:
-                for p in c.portfolios:
-                    if not hasattr(p, 'client'):
-                        p.client = c
-                    portfolios.append(p)
-        return render_template("portfolios.html", portfolios=portfolios, clients=clients, selected_client=selected_client)
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+        return render_template(
+            "home.html",
+            clients=clients,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            format_currency=format_currency,
+            active_page="home",
+        )
 
     @app.route("/accounts")
     def accounts_page():
-        # Verzamel alle cash accounts van alle portefeuilles
         selected_client_id = request.args.get("client_id", type=int)
-        selected_client = None
-        if selected_client_id:
-            for c in clients:
-                if c.client_id == selected_client_id:
-                    selected_client = c
-                    break
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
         accounts = []
-        source_clients = [selected_client] if selected_client else clients
-        for cl in source_clients:
-            for p in cl.portfolios:
-                if hasattr(p, 'cash_accounts'):
-                    for (aid, curr, atype), acc in p.cash_accounts.items():
-                        acc.aid = aid
-                        acc.curr = curr
-                        acc.atype = atype
-                        acc.portfolio = p
-                        accounts.append(acc)
-        return render_template("accounts.html", accounts=accounts, clients=clients, selected_client=selected_client, format_currency=format_currency)
+        if selected_portfolio and hasattr(selected_portfolio, 'cash_accounts'):
+            for (aid, curr, atype), acc in selected_portfolio.cash_accounts.items():
+                acc.aid = aid
+                acc.curr = curr
+                acc.atype = atype
+                acc.portfolio = selected_portfolio
+                accounts.append(acc)
+        return render_template(
+            "accounts.html",
+            accounts=accounts,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            format_currency=format_currency,
+            active_page="accounts",
+        )
 
     @app.route("/instruments")
     def instruments_page():
-        return render_template("instruments.html", products=product_collection.products)
+        selected_client_id = request.args.get("client_id", type=int)
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+        return render_template(
+            "instruments.html",
+            products=product_collection.products,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            active_page="instruments",
+        )
 
     return app
 

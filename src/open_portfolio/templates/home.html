@@ -16,33 +16,32 @@
       <p>Client: <span class="code-desc">{{ selected_client.client_id }} – {{ selected_client.name }}</span></p>
     {% endif %}
   </div>
-  {% if show_transaction_button %}
-    <a class="button" href="/transactions/new">Nieuwe transactie</a>
-  {% endif %}
 </section>
 {% if selected_client %}
 <section class="card stack">
   <h2>Portefeuilles</h2>
   <table style="width:100%; border-spacing:0; border-collapse:separate;">
-    <thead><tr><th style="text-align:left">ID &amp; Omschrijving</th><th style="text-align:left">Rekeningen</th></tr></thead>
+    <thead><tr><th style="text-align:left">ID &amp; Omschrijving</th><th style="text-align:left">Totaal cash saldo</th><th style="text-align:left">Acties</th></tr></thead>
     <tbody>
       {% for p in selected_client.portfolios %}
       <tr>
-        <td><a href="/holdings?portfolio_id={{ p.portfolio_id }}"><span class="code-desc">{{ p.portfolio_id }} – {{ p.name }}</span></a></td>
         <td>
-          <table style="width:auto;">
-            <thead><tr><th>ID</th><th>Valuta</th><th>Type</th><th>Saldo</th></tr></thead>
-            <tbody>
-              {% for (aid, curr, atype), acc in p.cash_accounts.items() %}
-              <tr>
-                <td>{{ aid }}</td>
-                <td>{{ curr }}</td>
-                <td>{{ atype.name }}</td>
-                <td class="valuta">{{ format_currency(acc.balance, curr) }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <a href="/holdings?client_id={{ selected_client.client_id }}&portfolio_id={{ p.portfolio_id }}">
+            <span class="code-desc">{{ p.portfolio_id }} – {{ p.name }}</span>
+          </a>
+        </td>
+        <td>
+          {% set ns = namespace(total=0) %}
+          {% for (aid, curr, atype), acc in p.cash_accounts.items() %}
+            {% if curr == p.default_currency %}
+              {% set ns.total = ns.total + acc.balance %}
+            {% endif %}
+          {% endfor %}
+          <span class="valuta">{{ format_currency(ns.total, p.default_currency) }}</span>
+        </td>
+        <td>
+          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ p.portfolio_id }}">Nieuwe transactie</a>
+          <a class="button" href="/accounts?client_id={{ selected_client.client_id }}&portfolio_id={{ p.portfolio_id }}">Cash accounts</a>
         </td>
       </tr>
       {% endfor %}

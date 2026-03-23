@@ -2,21 +2,41 @@
 {% block title %}Transacties - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Transacties</h2>
+<p>
+  Klant: <strong>{{ selected_client.name if selected_client else '-' }}</strong><br>
+  Portefeuille: <strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong>
+</p>
 <table>
   <thead>
     <tr><th>Datum</th><th>Portefeuille</th><th>Type</th><th>Product</th><th>Aantal</th><th>Prijs</th><th>Bedrag</th></tr>
   </thead>
   <tbody>
     {% for tx in transactions %}
-    <tr>
-      <td>{{ tx.transaction_date }}</td>
-      <td>{{ tx.portfolio_id }}</td>
-      <td>{{ tx.template.name }}</td>
-      <td>{{ tx.product_id }}</td>
-      <td class="valuta">{{ tx.amount }}</td>
-      <td class="valuta">{{ tx.price }}</td>
-      <td class="valuta">{{ tx.amount * tx.price }}</td>
-    </tr>
+      {% if tx.security_movements %}
+        {% for sm in tx.security_movements %}
+        <tr>
+          <td>{{ tx.transaction_date }}</td>
+          <td>{{ tx.portfolio_id }}</td>
+          <td>{{ sm.type }}</td>
+          <td>{{ sm.product_id }}</td>
+          <td class="valuta">{{ sm.amount_nominal }}</td>
+          <td class="valuta">{{ sm.price }}</td>
+          <td class="valuta">{{ format_currency(sm.amount_nominal * sm.price) }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+      <tr>
+        <td>{{ tx.transaction_date }}</td>
+        <td>{{ tx.portfolio_id }}</td>
+        <td>-</td>
+        <td>-</td>
+        <td class="valuta">-</td>
+        <td class="valuta">-</td>
+        <td class="valuta">-</td>
+      </tr>
+      {% endif %}
+    {% else %}
+      <tr><td colspan="7">Geen transacties voor deze portefeuille.</td></tr>
     {% endfor %}
   </tbody>
 </table>

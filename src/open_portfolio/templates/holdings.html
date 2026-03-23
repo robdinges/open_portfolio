@@ -2,22 +2,10 @@
 {% block title %}Holdings - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Holdings</h2>
-<form method="get" style="margin-bottom:2em;">
-  <label for="client_id">Kies client:</label>
-  <select name="client_id" id="client_id" onchange="this.form.submit()">
-    <option value="" {% if not selected_client %}selected{% endif %}>Alle clients</option>
-    {% for c in clients %}
-      <option value="{{ c.client_id }}" {% if selected_client and c.client_id == selected_client.client_id %}selected{% endif %}>{{ c.name }}</option>
-    {% endfor %}
-  </select>
-  <label for="portfolio_id" style="margin-left:2em">Kies portefeuille:</label>
-  <select name="portfolio_id" id="portfolio_id" onchange="this.form.submit()">
-    <option value="">-- kies --</option>
-    {% for p in portfolios %}
-      <option value="{{ p.portfolio_id }}" {% if selected_portfolio and p.portfolio_id == selected_portfolio.portfolio_id %}selected{% endif %}>{{ p.name }}</option>
-    {% endfor %}
-  </select>
-</form>
+<p>
+  Klant: <strong>{{ selected_client.name if selected_client else '-' }}</strong><br>
+  Portefeuille: <strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong>
+</p>
 {% if selected_portfolio %}
 <table>
   <thead>
@@ -34,8 +22,8 @@
         <td class="valuta">{{ format_currency(h.amount, h.product.issue_currency) }}</td>
         <td class="valuta">{{ format_currency(h.last_price, h.product.issue_currency) }}</td>
         <td>
-          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=BUY">B</a>
-          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=SELL">S</a>
+          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=BUY&return_to=holdings">B</a>
+          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=SELL&return_to=holdings">S</a>
         </td>
       </tr>
       {% endfor %}

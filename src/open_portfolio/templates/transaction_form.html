@@ -1,27 +1,45 @@
 {% extends "base.html" %}
 {% block title %}Nieuwe Transactie - OpenPortfolio{% endblock %}
+{% block head %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const form = document.getElementById("tx-form");
+  if (!form) return;
+  let dirty = false;
+  form.addEventListener("change", function (event) {
+    if (event.target && event.target.dataset && event.target.dataset.autoSubmit === "1") {
+      return;
+    }
+    dirty = true;
+  });
+  form.addEventListener("submit", function () {
+    dirty = false;
+  });
+  window.addEventListener("beforeunload", function (event) {
+    if (!dirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+});
+</script>
+{% endblock %}
 {% block content %}
 <h2>Nieuwe transactie</h2>
-<form method="post">
+<form method="post" id="tx-form">
+  <input type="hidden" name="client_id" value="{{ selected_client_id }}">
+  <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id }}">
+  <input type="hidden" name="return_to" value="{{ return_to or '' }}">
   <div class="form-row">
-    <label for="client_id">Klant</label>
-    <select name="client_id" id="client_id" required onchange="this.form.submit()" style="max-width: 300px;">
-      {% for c in clients %}
-        <option value="{{ c.client_id }}" {% if c.client_id == selected_client_id %}selected{% endif %}>{{ c.name }}</option>
-      {% endfor %}
-    </select>
+    <label>Klant</label>
+    <span>{{ selected_client.name if selected_client else '-' }}</span>
   </div>
   <div class="form-row">
-    <label for="portfolio_id">Portefeuille</label>
-    <select name="portfolio_id" id="portfolio_id" required onchange="this.form.submit()" style="max-width: 300px;">
-      {% for p in portfolios %}
-        <option value="{{ p.portfolio_id }}" {% if p.portfolio_id == selected_portfolio_id %}selected{% endif %}>{{ p.name }}</option>
-      {% endfor %}
-    </select>
+    <label>Portefeuille</label>
+    <span>{{ selected_portfolio.name if selected_portfolio else '-' }}</span>
   </div>
   <div class="form-row">
     <label for="template">Type</label>
-    <select name="template" id="template" required onchange="this.form.submit()" style="max-width: 200px;">
+    <select name="template" id="template" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 200px;">
       {% for t in templates %}
         <option value="{{ t.name }}" {% if t.name == selected_template %}selected{% endif %}>{{ t.name }}</option>
       {% endfor %}
@@ -29,7 +47,7 @@
   </div>
   <div class="form-row">
     <label for="product_id">Instrument</label>
-    <select name="product_id" id="product_id" required onchange="this.form.submit()" style="max-width: 400px;">
+    <select name="product_id" id="product_id" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 400px;">
       {% for pid, prod in products.items() %}
         <option value="{{ pid }}" {% if pid == selected_product_id %}selected{% endif %}>{{ prod.description }}</option>
       {% endfor %}
@@ -38,7 +56,7 @@
   {% if show_amount %}
   <div class="form-row">
     <label for="amount">Aantal{% if amount_label %} ({{ amount_label }}){% endif %}</label>
-    <input type="number" name="amount" id="amount" step="0.01" min="0" max="1000000000" style="max-width: 200px;">
+    <input type="number" name="amount" id="amount" step="0.01" min="0" max="1000000000" required style="max-width: 200px;">
   </div>
   {% endif %}
   {% if show_nominal %}
@@ -49,7 +67,7 @@
   {% endif %}
   <div class="form-row">
     <label for="price">Prijs</label>
-    <input type="number" name="price" id="price" step="any" value="{{ price or '' }}" required />
+    <input type="number" name="price" id="price" step="any" min="0" value="{{ price or '' }}" required />
   </div>
   <div class="form-row">
     <label for="cash_account">Geldrekening</label>
@@ -70,5 +88,6 @@
     <button class="button cancel" type="submit" name="cancel" value="1">Annuleren</button>
   </div>
 </form>
+{% if success_message %}<div class="success">{{ success_message }}</div>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% endblock %}
