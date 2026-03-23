@@ -22,7 +22,7 @@ import json
 import os
 from datetime import date, datetime
 from .clients import Client
-from .enums import TransactionTemplate, PaymentFrequency
+from .enums import TransactionTemplate, PaymentFrequency, AccountType
 from .products import Stock, Bond
 from .product_collection import ProductCollection
 from .prices import CurrencyPrices
@@ -127,10 +127,23 @@ def create_realistic_dataset():
         cash_accounts_data = json.load(f)
     for ca in cash_accounts_data:
         portfolio = next(p for p in portfolios if p.portfolio_id == ca['portfolio_id'])
-        for (acct_id, curr, acc_type), account in portfolio.cash_accounts.items():
-            if curr == ca['currency']:
-                account.balance = ca['balance']
-                account.start_balance = ca['balance']
+        matching_account = None
+        for (_, curr, acc_type), account in portfolio.cash_accounts.items():
+            if curr == ca['currency'] and acc_type == AccountType.CASH:
+                matching_account = account
+                break
+
+        if matching_account is None:
+            # Als de valutarekening nog niet bestaat, maak hem aan en zet meteen het startsaldo.
+            matching_account = portfolio.add_cash_account(
+                account_id=portfolio.portfolio_id,
+                currency=ca['currency'],
+                account_type=AccountType.CASH,
+                start_balance=ca['balance'],
+            )
+
+        matching_account.balance = ca['balance']
+        matching_account.start_balance = ca['balance']
 
     # Load currency prices from JSON
     cp = CurrencyPrices()
