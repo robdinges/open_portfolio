@@ -307,7 +307,7 @@ class TransactionManager:
             product = product_collection.search_product_id(product_id)
             if product is None:
                 raise ValueError(f"Product with ID {product_id} not found")
-            transaction_currency = product.issue_currency
+            transaction_currency = kwargs.get("settlement_currency") or product.issue_currency
             try:
                 account = portfolio.get_account_by_currency(transaction_currency)
             except ValueError:
@@ -324,6 +324,7 @@ class TransactionManager:
         # propagate computed values
         kwargs["exchange_rate"] = exchange_rate
         kwargs["transaction_currency"] = acct_curr
+        kwargs.pop("settlement_currency", None)
         # we will forward portfolio and product_collection explicitly below, so
         # remove them from the dynamic kwargs if present to avoid duplication
         kwargs.pop("portfolio", None)

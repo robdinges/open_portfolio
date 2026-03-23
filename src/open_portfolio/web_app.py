@@ -41,13 +41,20 @@ def create_demo_data():
 import locale
 
 def format_currency(amount, currency="EUR", symbol="€"):
+    symbols = {
+        "EUR": "EUR",
+        "USD": "USD",
+        "GBP": "GBP",
+        "CHF": "CHF",
+    }
     try:
         amount = float(amount)
     except Exception:
         return amount
     s = f"{amount:,.2f}"
     s = s.replace(",", "_").replace(".", ",").replace("_", ".")
-    return f"{symbol} {s}"
+    display_symbol = symbols.get(currency, symbol)
+    return f"{display_symbol} {s}"
 
 def make_app(client=None, product_collection=None, currency_prices=None):
     if Flask is None:
@@ -144,12 +151,27 @@ def make_app(client=None, product_collection=None, currency_prices=None):
     def new_transaction():
         error = None
         success_message = None
+
+        def get_fx(from_currency, to_currency):
+            if from_currency == to_currency:
+                return 1.0
+            try:
+                return float(currency_prices.get_latest_price(from_currency, to_currency))
+            except Exception:
+                try:
+                    return 1.0 / float(currency_prices.get_latest_price(to_currency, from_currency))
+                except Exception as exc:
+                    raise ValueError(f"Geen wisselkoers beschikbaar voor {from_currency}/{to_currency}") from exc
+
         if request.method == "POST":
             selected_client_id = int(request.form.get("client_id", clients[0].client_id))
             selected_portfolio_id = int(request.form.get("portfolio_id", 0))
             selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
             selected_template = request.form.get("template")
             selected_product_id = request.form.get("product_id")
+            selected_settlement_currency = request.form.get("settlement_currency")
+            entered_amount = request.form.get("amount", "")
+            entered_price = request.form.get("price", "")
             return_to = request.form.get("return_to", "")
 
             if request.form.get("cancel") == "1":
@@ -163,8 +185,13 @@ def make_app(client=None, product_collection=None, currency_prices=None):
                         raise ValueError("Geen portefeuille geselecteerd")
                     template = TransactionTemplate[selected_template]
                     product_id = int(selected_product_id)
-                    amount = float(request.form.get("amount", "0"))
-                    price = float(request.form.get("price", "0"))
+                    amount = float(entered_amount or "0")
+                    price = float(entered_price or "0")
+                    product = product_collection.search_product_id(product_id)
+                    if product is None:
+                        raise ValueError("Instrument niet gevonden")
+                    if not selected_settlement_currency:
+                        selected_settlement_currency = product.issue_currency
 
                     if amount <= 0:
                         raise ValueError("Aantal moet groter zijn dan 0")
@@ -186,6 +213,8 @@ def make_app(client=None, product_collection=None, currency_prices=None):
                         if amount > available_amount:
                             raise ValueError("Onvoldoende positie voor verkoop")
 
+                    exchange_rate = get_fx(product.issue_currency, selected_settlement_currency)
+
                     tx_manager.create_and_execute_transaction(
                         transaction_date=date.today(),
                         portfolio_id=selected_portfolio.portfolio_id,
@@ -196,10 +225,11 @@ def make_app(client=None, product_collection=None, currency_prices=None):
                         product_id=product_id,
                         amount=amount,
                         price=price,
+                        transaction_currency=selected_settlement_currency,
+                        exchange_rate=exchange_rate,
+                        settlement_currency=selected_settlement_currency,
                     )
                     success_message = "Transactie succesvol opgeslagen"
-                    if return_to == "holdings":
-                        return redirect(url_for("holdings_page", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
                     return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
                 except Exception as exc:
                     error = str(exc)
@@ -210,6 +240,9 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
             selected_template = request.args.get("template")
             selected_product_id = request.args.get("product_id")
+            selected_settlement_currency = request.args.get("settlement_currency")
+            entered_amount = request.args.get("amount", "")
+            entered_price = request.args.get("price", "")
         if selected_product_id:
             try:
                 selected_product_id = int(selected_product_id)
@@ -220,24 +253,80 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         if request.method == "POST" and 'return_to' not in locals():
             return_to = request.form.get("return_to", "")
         cash_accounts = []
+        settlement_currencies = []
+        selected_settlement_balance = None
         if selected_portfolio and hasattr(selected_portfolio, 'cash_accounts'):
             for (aid, curr, atype), acc in selected_portfolio.cash_accounts.items():
                 acc.aid = aid
                 acc.curr = curr
                 acc.atype = atype
                 cash_accounts.append(acc)
+                if atype.name == "CASH" and curr not in settlement_currencies:
+                    settlement_currencies.append(curr)
+
+        product = product_collection.search_product_id(selected_product_id) if selected_product_id else None
+        if not selected_settlement_currency:
+            if product and product.issue_currency in settlement_currencies:
+                selected_settlement_currency = product.issue_currency
+            elif settlement_currencies:
+                selected_settlement_currency = settlement_currencies[0]
+
+        selected_cash_account = None
+        for acc in cash_accounts:
+            if acc.curr == selected_settlement_currency:
+                selected_cash_account = acc
+                selected_settlement_balance = acc.balance
+                break
+
+        current_position = 0.0
+        position_by_product = {}
+        if selected_portfolio and selected_portfolio.securities_account:
+            for h in selected_portfolio.securities_account.holdings:
+                if isinstance(h, dict) and h.get("product"):
+                    pid = h["product"].instrument_id
+                    amt = float(h.get("amount", 0.0))
+                else:
+                    pid = getattr(getattr(h, "product", None), "instrument_id", None)
+                    amt = float(getattr(h, "amount", 0.0))
+                if pid is not None:
+                    position_by_product[pid] = amt
+            if selected_product_id in position_by_product:
+                current_position = position_by_product[selected_product_id]
+
+        kosteninschatting = "-"
+        amount_raw = request.form.get("amount") if request.method == "POST" else request.args.get("amount")
+        price_raw = request.form.get("price") if request.method == "POST" else request.args.get("price")
+        try:
+            amount_val = float(amount_raw) if amount_raw else 0.0
+            price_val = float(price_raw) if price_raw else 0.0
+            if amount_val > 0 and price_val >= 0 and product is not None and selected_settlement_currency:
+                cost_in_product_currency = 0.01 * amount_val * price_val
+                fx = get_fx(product.issue_currency, selected_settlement_currency)
+                kosteninschatting = format_currency(cost_in_product_currency * fx, selected_settlement_currency)
+        except Exception:
+            kosteninschatting = "-"
+
         return render_template(
             "transaction_form.html",
             clients=clients,
             selected_client=selected_client,
             selected_portfolio=selected_portfolio,
-            templates=[t for t in TransactionTemplate],
+            templates=[TransactionTemplate.BUY, TransactionTemplate.SELL],
             products=product_collection.products,
             selected_client_id=selected_client_id,
             selected_portfolio_id=selected_portfolio_id,
             selected_template=selected_template,
             selected_product_id=selected_product_id,
+            amount=entered_amount,
+            price=entered_price,
             cash_accounts=cash_accounts,
+            settlement_currencies=settlement_currencies,
+            selected_settlement_currency=selected_settlement_currency,
+            selected_settlement_balance=selected_settlement_balance,
+            selected_cash_account=selected_cash_account,
+            current_position=current_position,
+            position_by_product=position_by_product,
+            kosteninschatting=kosteninschatting,
             show_amount=True,
             amount_label=None,
             format_currency=format_currency,

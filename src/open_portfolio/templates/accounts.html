@@ -2,19 +2,18 @@
 {% block title %}Cash Accounts - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Cash Accounts</h2>
-<p>
-  Klant: <strong>{{ selected_client.name if selected_client else '-' }}</strong><br>
-  Portefeuille: <strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong>
-</p>
+<div class="context-grid">
+  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
+  <div class="label">Portefeuille</div><div><strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong></div>
+  <div class="label">Portefeuille id</div><div><strong>{{ selected_portfolio.portfolio_id if selected_portfolio else '-' }}</strong></div>
+</div>
 <table>
   <thead>
-    <tr><th>Portfolio</th><th>Account ID</th><th>Currency</th><th>Type</th><th>Balance</th></tr>
+    <tr><th>Currency</th><th>Type</th><th>Balance</th></tr>
   </thead>
   <tbody>
     {% for acc in accounts %}
     <tr>
-      <td>{{ acc.portfolio.name }}</td>
-      <td>{{ acc.aid }}</td>
       <td>{{ acc.curr }}</td>
       <td>{{ acc.atype.name }}</td>
       <td class="valuta">{{ format_currency(acc.balance, acc.curr) }}</td>

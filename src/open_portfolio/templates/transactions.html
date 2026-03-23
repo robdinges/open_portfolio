@@ -2,36 +2,45 @@
 {% block title %}Transacties - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Transacties</h2>
-<p>
-  Klant: <strong>{{ selected_client.name if selected_client else '-' }}</strong><br>
-  Portefeuille: <strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong>
-</p>
+<div class="context-grid">
+  <div class="label">Portefeuille</div><div><strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong></div>
+  <div class="label">Portefeuille id</div><div><strong>{{ selected_portfolio.portfolio_id if selected_portfolio else '-' }}</strong></div>
+  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
+</div>
 <table>
   <thead>
-    <tr><th>Datum</th><th>Portefeuille</th><th>Type</th><th>Product</th><th>Aantal</th><th>Prijs</th><th>Bedrag</th></tr>
+    <tr><th>Datum</th><th>Type</th><th>Product</th><th>Aantal</th><th>Prijs</th><th>Cashrekening</th><th>Totaal (cash valuta)</th></tr>
   </thead>
   <tbody>
     {% for tx in transactions %}
       {% if tx.security_movements %}
         {% for sm in tx.security_movements %}
+        {% set ns = namespace(total=0, account='-', currency='EUR') %}
+        {% for cm in tx.cash_movements %}
+          {% if cm.type in ['security_buy', 'security_sell', 'costs', 'accrued_interest'] %}
+            {% set ns.total = ns.total + cm.amount %}
+            {% set ns.account = cm.cash_account_id %}
+            {% set ns.currency = cm.currency %}
+          {% endif %}
+        {% endfor %}
         <tr>
           <td>{{ tx.transaction_date }}</td>
-          <td>{{ tx.portfolio_id }}</td>
           <td>{{ sm.type }}</td>
           <td>{{ sm.product_id }}</td>
           <td class="valuta">{{ sm.amount_nominal }}</td>
           <td class="valuta">{{ sm.price }}</td>
-          <td class="valuta">{{ format_currency(sm.amount_nominal * sm.price) }}</td>
+          <td>{{ ns.account }} ({{ ns.currency }})</td>
+          <td class="valuta">{{ format_currency(ns.total, ns.currency) }}</td>
         </tr>
         {% endfor %}
       {% else %}
       <tr>
         <td>{{ tx.transaction_date }}</td>
-        <td>{{ tx.portfolio_id }}</td>
         <td>-</td>
         <td>-</td>
         <td class="valuta">-</td>
         <td class="valuta">-</td>
+        <td>-</td>
         <td class="valuta">-</td>
       </tr>
       {% endif %}

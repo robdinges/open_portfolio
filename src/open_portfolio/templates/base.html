@@ -23,6 +23,9 @@
         .actions { white-space: nowrap; }
         .error { color: #c0392b; font-weight: 500; }
         .success { color: #27ae60; font-weight: 500; }
+        .context-grid { display: grid; grid-template-columns: 180px 1fr; gap: 0.4em 1em; margin: 0.8em 0 1.2em; }
+        .context-grid .label { font-weight: 600; }
+        .top-actions { margin-bottom: 1em; }
     </style>
     {% block head %}{% endblock %}
 </head>
@@ -32,12 +35,17 @@
         <nav>
             <a href="/{{ nav_query or '' }}" class="{% if active_page == 'home' %}active{% endif %}">Home</a>
             <a href="/accounts{{ nav_query or '' }}" class="{% if active_page == 'accounts' %}active{% endif %}">Cash Accounts</a>
-            <a href="/instruments{{ nav_query or '' }}" class="{% if active_page == 'instruments' %}active{% endif %}">Instruments</a>
             <a href="/holdings{{ nav_query or '' }}" class="{% if active_page == 'holdings' %}active{% endif %}">Holdings</a>
             <a href="/transactions{{ nav_query or '' }}" class="{% if active_page == 'transactions' %}active{% endif %}">Transactions</a>
+            <a href="/instruments{{ nav_query or '' }}" class="{% if active_page == 'instruments' %}active{% endif %}">Instruments</a>
         </nav>
     </header>
     <main>
+        {% if active_page != 'home' %}
+        <div class="top-actions">
+            <a class="button" href="/{{ nav_query or '' }}">Naar Home</a>
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
 </body>

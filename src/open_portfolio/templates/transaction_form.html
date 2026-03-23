@@ -39,7 +39,7 @@ document.addEventListener("DOMContentLoaded", function () {
   </div>
   <div class="form-row">
     <label for="template">Type</label>
-    <select name="template" id="template" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 200px;">
+    <select name="template" id="template" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 200px; font-size: 1em;">
       {% for t in templates %}
         <option value="{{ t.name }}" {% if t.name == selected_template %}selected{% endif %}>{{ t.name }}</option>
       {% endfor %}
@@ -47,16 +47,18 @@ document.addEventListener("DOMContentLoaded", function () {
   </div>
   <div class="form-row">
     <label for="product_id">Instrument</label>
-    <select name="product_id" id="product_id" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 400px;">
+    <select name="product_id" id="product_id" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 400px; font-size: 1em;">
       {% for pid, prod in products.items() %}
-        <option value="{{ pid }}" {% if pid == selected_product_id %}selected{% endif %}>{{ prod.description }}</option>
+        <option value="{{ pid }}" {% if pid == selected_product_id %}selected{% endif %}>
+          {{ prod.description }}{% if position_by_product.get(pid, 0) > 0 %} (positie: {{ position_by_product.get(pid) }}){% endif %}
+        </option>
       {% endfor %}
     </select>
   </div>
   {% if show_amount %}
   <div class="form-row">
     <label for="amount">Aantal{% if amount_label %} ({{ amount_label }}){% endif %}</label>
-    <input type="number" name="amount" id="amount" step="0.01" min="0" max="1000000000" required style="max-width: 200px;">
+    <input type="number" name="amount" id="amount" step="0.01" min="0" max="1000000000" value="{{ amount or '' }}" required style="max-width: 200px;">
   </div>
   {% endif %}
   {% if show_nominal %}
@@ -70,14 +72,13 @@ document.addEventListener("DOMContentLoaded", function () {
     <input type="number" name="price" id="price" step="any" min="0" value="{{ price or '' }}" required />
   </div>
   <div class="form-row">
-    <label for="cash_account">Geldrekening</label>
-    <select name="cash_account" id="cash_account" required>
-      {% for acc in cash_accounts %}
-        <option value="{{ acc.aid }}" {% if acc.aid == selected_cash_account %}selected{% endif %}>
-          {{ acc.aid }} ({{ acc.curr }}, saldo: {{ format_currency(acc.balance, acc.curr) }})
-        </option>
+    <label for="settlement_currency">Afrekenvaluta</label>
+    <select name="settlement_currency" id="settlement_currency" required data-auto-submit="1" onchange="this.form.requestSubmit()" style="max-width: 200px; font-size: 1em;">
+      {% for curr in settlement_currencies %}
+      <option value="{{ curr }}" {% if curr == selected_settlement_currency %}selected{% endif %}>{{ curr }}</option>
       {% endfor %}
     </select>
+    <span style="margin-left: 1em;">Saldo: {{ format_currency(selected_settlement_balance or 0, selected_settlement_currency or 'EUR') }}</span>
   </div>
   <div class="form-row">
     <label>Kosteninschatting</label>

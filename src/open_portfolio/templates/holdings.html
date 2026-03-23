@@ -2,10 +2,11 @@
 {% block title %}Holdings - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Holdings</h2>
-<p>
-  Klant: <strong>{{ selected_client.name if selected_client else '-' }}</strong><br>
-  Portefeuille: <strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong>
-</p>
+<div class="context-grid">
+  <div class="label">Portefeuille</div><div><strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong></div>
+  <div class="label">Portefeuille id</div><div><strong>{{ selected_portfolio.portfolio_id if selected_portfolio else '-' }}</strong></div>
+  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
+</div>
 {% if selected_portfolio %}
 <table>
   <thead>
