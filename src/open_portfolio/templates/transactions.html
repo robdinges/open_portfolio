@@ -23,12 +23,25 @@
             {% set ns.currency = cm.currency %}
           {% endif %}
         {% endfor %}
+        {% set product = product_collection.search_product_id(sm.product_id) if product_collection else None %}
         <tr>
           <td>{{ tx.transaction_date }}</td>
           <td>{{ sm.type }}</td>
           <td>{{ sm.product_id }}</td>
-          <td class="valuta">{{ sm.amount_nominal }}</td>
-          <td class="valuta">{{ sm.price }}</td>
+          <td class="valuta">
+            {% if product and product.is_bond() %}
+              {{ sm.amount_nominal | round(2) }} {{ product.issue_currency }}
+            {% else %}
+              {{ sm.amount_nominal | round(2) }} stuks
+            {% endif %}
+          </td>
+          <td class="valuta">
+            {% if product and product.is_bond() %}
+              {{ sm.price | round(2) }}%
+            {% else %}
+              {{ format_currency(sm.price, product.issue_currency if product else 'EUR') }}
+            {% endif %}
+          </td>
           <td>{{ ns.account }} ({{ ns.currency }})</td>
           <td class="valuta">{{ format_currency(ns.total, ns.currency) }}</td>
         </tr>

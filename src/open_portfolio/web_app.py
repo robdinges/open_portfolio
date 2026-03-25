@@ -106,6 +106,7 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             selected_client=selected_client,
             selected_client_id=selected_client.client_id if selected_client else None,
             selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            valuation_date=date.today(),
             nav_query=nav_query(selected_client, selected_portfolio),
             format_currency=format_currency,
             active_page="holdings",
@@ -134,9 +135,12 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         selected_portfolio_id = request.args.get("portfolio_id", type=int)
         selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
         all_transactions = selected_portfolio.list_all_transactions() if selected_portfolio else []
+        # Sorteer transacties op datum, nieuwste bovenaan
+        all_transactions = sorted(all_transactions, key=lambda tx: tx.get('date', tx.get('transaction_date', '')), reverse=True)
         return render_template(
             "transactions.html",
             transactions=all_transactions,
+            product_collection=product_collection,
             selected_client=selected_client,
             selected_portfolio=selected_portfolio,
             selected_client_id=selected_client.client_id if selected_client else None,

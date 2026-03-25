@@ -10,18 +10,31 @@
 {% if selected_portfolio %}
 <table>
   <thead>
-    <tr><th>Instrument ID</th><th>Naam</th><th>Type</th><th>Valuta</th><th>Aantal/Nom.</th><th>Laatste koers</th><th>Acties</th></tr>
+    <tr><th>Instrument ID</th><th>Naam</th><th>Type</th><th>Valuta</th><th>Aantal / Nominaal</th><th>Prijs</th><th>Acties</th></tr>
   </thead>
   <tbody>
     {% if selected_portfolio.securities_account and selected_portfolio.securities_account.holdings %}
       {% for h in selected_portfolio.securities_account.holdings %}
+      {% set display_price = h.last_price if h.last_price is defined else h.product.get_price(valuation_date) %}
       <tr>
         <td>{{ h.product.instrument_id }}</td>
         <td>{{ h.product.description }}</td>
         <td>{{ h.product.__class__.__name__ }}</td>
         <td>{{ h.product.issue_currency }}</td>
-        <td class="valuta">{{ format_currency(h.amount, h.product.issue_currency) }}</td>
-        <td class="valuta">{{ format_currency(h.last_price, h.product.issue_currency) }}</td>
+        <td class="valuta">
+          {% if h.product.is_bond() %}
+            {{ h.amount | round(2) }} {{ h.product.issue_currency }}
+          {% else %}
+            {{ h.amount | round(2) }} stuks
+          {% endif %}
+        </td>
+        <td class="valuta">
+          {% if h.product.is_bond() %}
+            {{ (display_price or 0) | round(2) }}%
+          {% else %}
+            {{ format_currency((display_price or 0), h.product.issue_currency) }}
+          {% endif %}
+        </td>
         <td>
           <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=BUY&return_to=holdings">B</a>
           <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=SELL&return_to=holdings">S</a>

@@ -23,6 +23,74 @@
 - **Sorting**: Sta sorteren toe op kolommen met bedragen en codes.
 - **Tooltip**: Overweeg tooltips voor afkortingen of codes voor extra uitleg.
 
-## Skill file of instructions?
-- **UI/UX-richtlijnen** zoals hierboven beschreven horen thuis in een instructions file.
-- **Specifieke formatteringsfuncties** (zoals een Python-functie voor valutaformattering) kun je beter in een skill file of als utility-functie in je codebase opnemen.
+
+## UI & Navigatie
+- Elke pagina bevat consistente navigatie (menu + terugknop naar Home).
+- Home is centrale entry: eerst client selecteren, daarna dynamisch gefilterde portefeuilles tonen.
+- Geselecteerde portfolio is globale context voor alle schermen (holdings, transacties, cash accounts).
+- Context (client, portfolio, portfolio id) altijd zichtbaar bovenaan elk relevant scherm.
+
+## Data filtering & consistentie
+- Alle schermen tonen data gefilterd op geselecteerde client/portfolio.
+- Geen hardcoded of default selectie (bijv. alleen client1); altijd dynamisch laden.
+- Verwijder redundante schermen als functionaliteit al in andere UI zit (bijv. Clients/Portfolios geïntegreerd in Home).
+
+## Valuta & bedragen (uitbreiding)
+- Bedragen altijd in valutaformaat:
+  - 2 decimalen
+  - decimale komma, punt als duizendtalseparator
+- Berekeningen intern met hogere precisie toegestaan.
+- Bedragen visueel uitlijnen op decimale komma.
+- Toon altijd valuta (ISO of symbool) correct per rekening.
+
+## Formulieren & interactie
+- Bij verlaten pagina met wijzigingen:
+  - expliciet save of discard afdwingen
+- Invoervelden:
+  - logisch uitgelijnd (label + veld)
+  - realistische breedte (niet full-width)
+- Geen dubbele of onduidelijke invoervelden.
+
+## Transactielogica (UI gedrag)
+- Flow: client → portfolio → instrument → transactie.
+- Dynamische invoer afhankelijk van instrumenttype (bijv. aandelen vs obligaties).
+- Default cashrekening:
+  - gebaseerd op instrumentvaluta (indien beschikbaar)
+- Altijd tonen:
+  - huidig saldo
+  - saldo na transactie
+  - totaal af te boeken bedrag
+- Debetsaldo niet toegestaan.
+- Alternatieve rekening (portfolio valuta) altijd selecteerbaar.
+
+## Validaties
+- Verkoop alleen mogelijk bij voldoende positie.
+- UI toont huidige positie bij selectie instrument.
+- Fouten voorkomen i.p.v. tonen (preventieve validatie).
+
+## Feedback & flow
+- Na succesvolle transactie: redirect naar transactiescherm of holdings.
+- Vanuit holdings:
+  - Buy/Sell knop opent transactie met prefilled context.
+- Ingevoerde transacties direct zichtbaar in overzicht.
+
+## Data model & identificatie
+- Gebruik interne unieke ID’s voor:
+  - instrumenten
+  - portefeuilles
+- Toon ID + naam samen voor context.
+- Vermijd hardcoded namen (zoals “stock_siemens”).
+
+## Architectuur
+- Scheid:
+  - UI (Flask templates)
+  - business logic
+  - data (JSON/CSV mogelijk)
+- Verwijder redundante code en structureer in logische modules.
+- Eén consistente manier voor state management (bijv. session).
+
+## Eenduidigheid
+- **Kleurgebruik**: zorg dat gelijke functies en gelijke velden een uniforme en herkenbare kleur
+
+## Onderhoud SKILLS.md en instructions.md
+- kijk bij elke prompt die ik je geef of het handig is om op basis daarvan de SKILLS of de instructions aan te vullen of te wijzigen.
