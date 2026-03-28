@@ -43,16 +43,23 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
+      - name: Verify SSH access and app directory
+        shell: bash
+        run: |
+          ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "mkdir -p '${{ secrets.APP_DIR }}' && test -w '${{ secrets.APP_DIR }}'"
+
       - name: Sync repository
         shell: bash
         run: |
           rsync -az --delete \
             --exclude '.git' \
             --exclude '.venv' \
+            -e "ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes -p ${{ secrets.SSH_PORT }}" \
             ./ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.APP_DIR }}/"
 
       - name: Run remote deploy
         shell: bash
         run: |
-          ssh -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+          ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
             "cd '${{ secrets.APP_DIR }}' && APP_DIR='${{ secrets.APP_DIR }}' BRANCH='main' ./scripts/deploy.sh"
