@@ -31,6 +31,14 @@ Datum: 2026-03-07
    - Splits `app.py` op in UI, services en repository laag.
    - Verminder session-state koppeling in domeinlogica.
 
+4. **Order lifecycle persistentie (Draft/Validated/Submitted)**
+   - Persistente opslag van conceptorders met status, timestamps en validatieresultaten.
+   - Vervang tijdelijke in-memory opslag in order flow door DB-backed repository.
+
+5. **Audit actor context voor orders**
+   - Leg order-actor metadata vast (gebruiker, rol, kanaal, referentie).
+   - Koppel actor metadata aan bevestiging en definitieve boeking.
+
 4. **Koersimportbestanden (batch) naar DB**
    - Batch-import valutakoersen met duplicate-skip (transactiegebaseerd en extern).
 
@@ -40,6 +48,8 @@ Datum: 2026-03-07
 
 6. **Rebuild/replay validatie na edits**
    - Volledige portfolio-replay na transactiewijziging met integriteitschecks.
+
+7. **Format input screen**
 
 ## Should
 
@@ -72,6 +82,12 @@ Datum: 2026-03-07
 8. **Analyse-export naar Excel**
    - Downloadknop op Analysepagina voor directe export van alle beslisatabellen.
    - Vaste tabbladnaam `Analyse` en kolomvolgorde consistent met UI.
+
+9. **Order Entry placeholders afronden**
+   - OE-GAP-001: geavanceerde risicolimieten (concentratie/dagnotional/trader).
+   - OE-GAP-002: uitgebreid kostenmodel (broker/beurs/vaste componenten).
+   - OE-GAP-003: intraday prijsversheid voor market orders.
+   - OE-GAP-004: uitgebreide audit actor context.
 
 ## Could
 

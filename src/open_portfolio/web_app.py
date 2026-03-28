@@ -9,6 +9,7 @@ not installed. The web UI is intentionally tiny: an overview page and a
 form to submit a BUY/SELL transaction.
 """
 from __future__ import annotations
+import os
 import sys
 from datetime import date
 
@@ -18,8 +19,10 @@ except Exception as e:  # pragma: no cover - runtime dependency
     Flask = None  # type: ignore
 
 from .product_collection import ProductCollection
+from .database import Database
 from .transactions import TransactionManager
 from .enums import TransactionTemplate
+from .order_entry import DatabaseOrderRepository, OrderStatus, placeholder_messages
 from .sample_data import create_realistic_dataset
 
 
@@ -51,7 +54,7 @@ def format_currency(amount, currency="EUR", symbol="€"):
     display_symbol = symbols.get(currency, symbol)
     return f"{display_symbol} {s}"
 
-def make_app(client=None, product_collection=None, currency_prices=None):
+def make_app(client=None, product_collection=None, currency_prices=None, order_database=None):
     if Flask is None:
         raise RuntimeError("Flask is not installed. Please `pip install flask` to run the web UI.")
 
@@ -66,6 +69,18 @@ def make_app(client=None, product_collection=None, currency_prices=None):
 
     app = Flask(__name__)
     tx_manager = TransactionManager()
+    if order_database is None:
+        default_order_db_path = os.getenv("OPEN_PORTFOLIO_ORDER_DB_PATH", "open_portfolio_orders.sqlite3")
+        order_database = Database(default_order_db_path)
+
+    retention_raw = os.getenv("OPEN_PORTFOLIO_ORDER_DRAFT_RETENTION_DAYS", "30")
+    try:
+        retention_days = int(retention_raw)
+    except ValueError:
+        retention_days = 30
+    startup_purged_drafts = order_database.purge_stale_order_drafts(retention_days=retention_days)
+
+    order_repo = DatabaseOrderRepository(order_database)
 
     def resolve_context(client_id=None, portfolio_id=None):
         selected_client = None
@@ -270,6 +285,11 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             entered_price = request.form.get("price", "")
             entered_tx_date = request.form.get("transaction_date", date.today().isoformat())
             return_to = request.form.get("return_to", "")
+            order_action = request.form.get("action", "")
+            order_draft_id = request.form.get("order_draft_id", "")
+            actor_id = request.form.get("actor_id", "")
+            actor_role = request.form.get("actor_role", "")
+            actor_channel = request.form.get("actor_channel", "web")
         else:
             selected_client_id = int(request.args.get("client_id", clients[0].client_id))
             fallback_portfolio_id = clients[0].portfolios[0].portfolio_id if clients and clients[0].portfolios else 0
@@ -283,6 +303,42 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             entered_price = request.args.get("price", "")
             entered_tx_date = request.args.get("transaction_date", date.today().isoformat())
             return_to = request.args.get("return_to", "")
+            order_action = ""
+            order_draft_id = request.args.get("order_draft_id", "")
+            actor_id = request.args.get("actor_id", "")
+            actor_role = request.args.get("actor_role", "")
+            actor_channel = request.args.get("actor_channel", "web")
+
+        if selected_product_id:
+            try:
+                selected_product_id = int(selected_product_id)
+            except Exception:
+                selected_product_id = None
+
+        if request.method == "GET" and order_draft_id:
+            existing_draft = order_repo.get_draft(order_draft_id)
+            if existing_draft is not None:
+                payload = existing_draft.payload or {}
+                if request.args.get("template") is None:
+                    selected_template = payload.get("template", selected_template)
+                if request.args.get("order_type") is None:
+                    selected_order_type = payload.get("order_type", selected_order_type)
+                if request.args.get("product_id") is None:
+                    selected_product_id = payload.get("product_id", selected_product_id)
+                if request.args.get("settlement_currency") is None:
+                    selected_settlement_currency = payload.get("settlement_currency", selected_settlement_currency)
+                if request.args.get("amount") is None:
+                    entered_amount = payload.get("amount", entered_amount)
+                if request.args.get("price") is None:
+                    entered_price = payload.get("price", entered_price)
+                if request.args.get("transaction_date") is None:
+                    entered_tx_date = payload.get("transaction_date", entered_tx_date)
+                if request.args.get("actor_id") is None:
+                    actor_id = payload.get("actor_id", actor_id)
+                if request.args.get("actor_role") is None:
+                    actor_role = payload.get("actor_role", actor_role)
+                if request.args.get("actor_channel") is None:
+                    actor_channel = payload.get("actor_channel", actor_channel)
 
         if selected_product_id:
             try:
@@ -327,114 +383,212 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         estimated_accrued = None
         estimated_total = None
         used_price = None
+        order_status = "Nieuw"
+        order_warnings = []
+        order_placeholder_messages = placeholder_messages()
 
-        if request.method == "POST" and request.form.get("cancel") == "1":
+        def validate_and_calculate_order():
+            if selected_portfolio is None:
+                raise ValueError("Geen portefeuille geselecteerd")
+            if product is None:
+                raise ValueError("Instrument niet gevonden")
+            if selected_template not in {"BUY", "SELL"}:
+                raise ValueError("Ongeldige transactiesoort")
+            if selected_order_type not in {"MARKET", "LIMIT"}:
+                raise ValueError("Ongeldig ordertype")
+
+            tx_date_local = parse_tx_date(entered_tx_date)
+            amount_local = parse_decimal(entered_amount, amount_label)
+            if amount_local <= 0:
+                raise ValueError(f"{amount_label} moet groter zijn dan 0")
+
+            template_local = TransactionTemplate[selected_template]
+            if template_local == TransactionTemplate.SELL and amount_local > current_position:
+                raise ValueError("Onvoldoende positie voor verkoop")
+
+            if amount_unit and not is_multiple_of_unit(amount_local, float(amount_unit)):
+                raise ValueError(f"{amount_label} moet een veelvoud zijn van handelseenheid {amount_unit}")
+            if template_local == TransactionTemplate.BUY and minimum_order_size and amount_local < float(minimum_order_size):
+                raise ValueError(f"{amount_label} moet minimaal {minimum_order_size} zijn")
+
+            if selected_order_type == "LIMIT":
+                displayed_price_local = parse_decimal(entered_price, "Limiet")
+                if displayed_price_local <= 0:
+                    raise ValueError("Limiet moet groter zijn dan 0")
+            else:
+                displayed_price_local = get_latest_price_for_date(product, tx_date_local)
+
+            execution_price_local = to_execution_price(product, displayed_price_local)
+
+            if selected_settlement_currency not in allowed_settlement_currencies:
+                raise ValueError("Ongeldige afrekenrekening gekozen")
+            if not selected_settlement_currency:
+                raise ValueError("Geen afrekenrekening beschikbaar voor deze order")
+
+            exchange_rate_local = get_fx(product.issue_currency, selected_settlement_currency)
+            trade_amount_local = amount_local * execution_price_local * exchange_rate_local
+            cost_local = calculate_cost(amount_local, execution_price_local) * exchange_rate_local
+            accrued_local = 0.0
+            if is_bond:
+                accrued_local = product.calculate_accrued_interest(amount_local, tx_date_local) * exchange_rate_local
+
+            if template_local == TransactionTemplate.SELL:
+                total_local = trade_amount_local - cost_local + accrued_local
+            else:
+                total_local = trade_amount_local + cost_local + accrued_local
+
+            if template_local == TransactionTemplate.BUY:
+                estimated_cash_impact = trade_amount_local + cost_local + max(accrued_local, 0)
+                if selected_settlement_balance is not None and estimated_cash_impact > float(selected_settlement_balance):
+                    raise ValueError("Onvoldoende beschikbaar saldo op gekozen rekening")
+
+            payload_local = {
+                "transaction_date": tx_date_local,
+                "portfolio_id": selected_portfolio.portfolio_id,
+                "template": template_local,
+                "portfolio": selected_portfolio,
+                "product_collection": product_collection,
+                "currency_prices": currency_prices,
+                "product_id": product.instrument_id,
+                "amount": amount_local,
+                "price": execution_price_local,
+                "transaction_currency": selected_settlement_currency,
+                "exchange_rate": exchange_rate_local,
+                "settlement_currency": selected_settlement_currency,
+            }
+
+            return {
+                "payload": payload_local,
+                "display_price": displayed_price_local,
+                "trade": trade_amount_local,
+                "cost": cost_local,
+                "accrued": accrued_local,
+                "total": total_local,
+            }
+
+        if request.method == "POST" and (request.form.get("cancel") == "1" or order_action == "cancel"):
             if return_to == "holdings":
                 return redirect(url_for("holdings_page", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
             return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
 
-        if request.method == "POST" and request.form.get("save") == "1":
-            try:
-                if selected_portfolio is None:
-                    raise ValueError("Geen portefeuille geselecteerd")
-                if product is None:
-                    raise ValueError("Instrument niet gevonden")
-                if selected_template not in {"BUY", "SELL"}:
-                    raise ValueError("Ongeldige transactiesoort")
-                if selected_order_type not in {"MARKET", "LIMIT"}:
-                    raise ValueError("Ongeldig ordertype")
+        if request.method == "POST":
+            effective_action = order_action
+            if request.form.get("save") == "1" and not effective_action:
+                effective_action = "submit"
 
-                tx_date = parse_tx_date(entered_tx_date)
-                amount = parse_decimal(entered_amount, amount_label)
-                if amount <= 0:
-                    raise ValueError(f"{amount_label} moet groter zijn dan 0")
+            if effective_action in {"draft", "confirm", "submit"}:
+                try:
+                    result = validate_and_calculate_order()
+                    used_price = result["display_price"]
+                    estimated_trade = result["trade"]
+                    estimated_cost = result["cost"]
+                    estimated_accrued = result["accrued"]
+                    estimated_total = result["total"]
 
-                template = TransactionTemplate[selected_template]
-                if template == TransactionTemplate.SELL and amount > current_position:
-                    raise ValueError("Onvoldoende positie voor verkoop")
+                    entered_price = f"{used_price:.6f}".rstrip("0").rstrip(".")
+                    payload_for_draft = {
+                        "portfolio_id": selected_portfolio_id,
+                        "client_id": selected_client_id,
+                        "template": selected_template,
+                        "order_type": selected_order_type,
+                        "product_id": selected_product_id,
+                        "settlement_currency": selected_settlement_currency,
+                        "amount": entered_amount,
+                        "price": entered_price,
+                        "transaction_date": entered_tx_date,
+                        "actor_id": actor_id,
+                        "actor_role": actor_role,
+                        "actor_channel": actor_channel,
+                    }
 
-                if amount_unit and not is_multiple_of_unit(amount, float(amount_unit)):
-                    raise ValueError(f"{amount_label} moet een veelvoud zijn van handelseenheid {amount_unit}")
-                if template == TransactionTemplate.BUY and minimum_order_size and amount < float(minimum_order_size):
-                    raise ValueError(f"{amount_label} moet minimaal {minimum_order_size} zijn")
-
-                if selected_order_type == "LIMIT":
-                    limit_price = parse_decimal(entered_price, "Limiet")
-                    if limit_price <= 0:
-                        raise ValueError("Limiet moet groter zijn dan 0")
-                    displayed_price = limit_price
-                else:
-                    displayed_price = get_latest_price_for_date(product, tx_date)
-                    entered_price = f"{displayed_price:.6f}".rstrip("0").rstrip(".")
-
-                price = to_execution_price(product, displayed_price)
-
-                if selected_settlement_currency not in allowed_settlement_currencies:
-                    raise ValueError("Ongeldige afrekenrekening gekozen")
-                if not selected_settlement_currency:
-                    raise ValueError("Geen afrekenrekening beschikbaar voor deze order")
-
-                exchange_rate = get_fx(product.issue_currency, selected_settlement_currency)
-
-                trade_amount_settlement = amount * price * exchange_rate
-                cost_settlement = calculate_cost(amount, price) * exchange_rate
-                accrued_settlement = 0.0
-                if is_bond:
-                    accrued_settlement = product.calculate_accrued_interest(amount, tx_date) * exchange_rate
-
-                if template == TransactionTemplate.BUY:
-                    estimated_cash_impact = trade_amount_settlement + cost_settlement + max(accrued_settlement, 0)
-                    if selected_settlement_balance is not None and estimated_cash_impact > float(selected_settlement_balance):
-                        raise ValueError("Onvoldoende beschikbaar saldo op gekozen rekening")
-
-                tx_manager.create_and_execute_transaction(
-                    transaction_date=tx_date,
-                    portfolio_id=selected_portfolio.portfolio_id,
-                    template=template,
-                    portfolio=selected_portfolio,
-                    product_collection=product_collection,
-                    currency_prices=currency_prices,
-                    product_id=product.instrument_id,
-                    amount=amount,
-                    price=price,
-                    transaction_currency=selected_settlement_currency,
-                    exchange_rate=exchange_rate,
-                    settlement_currency=selected_settlement_currency,
-                )
-
-                success_message = "Transactie succesvol opgeslagen"
-                return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
-            except Exception as exc:
-                error = str(exc)
-
-        try:
-            if product and selected_settlement_currency:
-                tx_date_preview = parse_tx_date(entered_tx_date)
-                amount_preview = parse_optional_decimal(entered_amount)
-                if amount_preview and amount_preview > 0:
-                    if selected_order_type == "MARKET":
-                        used_price = get_latest_price_for_date(product, tx_date_preview)
+                    if effective_action == "draft":
+                        draft = order_repo.upsert_draft(
+                            payload=payload_for_draft,
+                            draft_id=order_draft_id or None,
+                            status=OrderStatus.DRAFT,
+                            warnings=order_placeholder_messages,
+                        )
+                        order_draft_id = draft.draft_id
+                        order_status = "Concept"
+                        success_message = f"Conceptorder opgeslagen ({draft.draft_id})"
+                    elif effective_action == "confirm":
+                        draft = order_repo.upsert_draft(
+                            payload=payload_for_draft,
+                            draft_id=order_draft_id or None,
+                            status=OrderStatus.VALIDATED,
+                            warnings=order_placeholder_messages,
+                        )
+                        order_draft_id = draft.draft_id
+                        order_status = "Gevalideerd"
+                        success_message = f"Order gevalideerd ({draft.draft_id}). Klik op Definitief boeken om uit te voeren."
                     else:
-                        limit_preview = parse_optional_decimal(entered_price)
-                        used_price = limit_preview if limit_preview is not None else None
+                        tx_manager.create_and_execute_transaction(**result["payload"])
+                        if order_draft_id:
+                            order_repo.set_status(order_draft_id, OrderStatus.SUBMITTED)
+                        success_message = "Order definitief geboekt"
+                        return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+                except Exception as exc:
+                    if effective_action == "draft":
+                        payload_for_draft = {
+                            "portfolio_id": selected_portfolio_id,
+                            "client_id": selected_client_id,
+                            "template": selected_template,
+                            "order_type": selected_order_type,
+                            "product_id": selected_product_id,
+                            "settlement_currency": selected_settlement_currency,
+                            "amount": entered_amount,
+                            "price": entered_price,
+                            "transaction_date": entered_tx_date,
+                            "actor_id": actor_id,
+                            "actor_role": actor_role,
+                            "actor_channel": actor_channel,
+                        }
+                        draft = order_repo.upsert_draft(
+                            payload=payload_for_draft,
+                            draft_id=order_draft_id or None,
+                            status=OrderStatus.REJECTED,
+                            errors=[str(exc)],
+                            warnings=order_placeholder_messages,
+                        )
+                        order_draft_id = draft.draft_id
+                        order_status = "Afgekeurd"
+                    error = str(exc)
 
-                    if used_price is not None and used_price > 0:
-                        execution_price = to_execution_price(product, used_price)
-                        fx = get_fx(product.issue_currency, selected_settlement_currency)
-                        estimated_trade = amount_preview * execution_price * fx
-                        estimated_cost = calculate_cost(amount_preview, execution_price) * fx
-                        if is_bond:
-                            estimated_accrued = product.calculate_accrued_interest(amount_preview, tx_date_preview) * fx
-                        else:
-                            estimated_accrued = 0.0
+        if order_draft_id:
+            existing_draft = order_repo.get_draft(order_draft_id)
+            if existing_draft is not None:
+                order_status = existing_draft.status.value.upper()
+                order_warnings = list(existing_draft.warnings)
 
-                        if selected_template == "SELL":
-                            estimated_total = estimated_trade - estimated_cost + (estimated_accrued or 0.0)
+        if estimated_total is None:
+            try:
+                if product and selected_settlement_currency:
+                    tx_date_preview = parse_tx_date(entered_tx_date)
+                    amount_preview = parse_optional_decimal(entered_amount)
+                    if amount_preview and amount_preview > 0:
+                        if selected_order_type == "MARKET":
+                            used_price = get_latest_price_for_date(product, tx_date_preview)
                         else:
-                            estimated_total = estimated_trade + estimated_cost + (estimated_accrued or 0.0)
-        except Exception:
-            # Preview should never block rendering.
-            pass
+                            limit_preview = parse_optional_decimal(entered_price)
+                            used_price = limit_preview if limit_preview is not None else None
+
+                        if used_price is not None and used_price > 0:
+                            execution_price = to_execution_price(product, used_price)
+                            fx = get_fx(product.issue_currency, selected_settlement_currency)
+                            estimated_trade = amount_preview * execution_price * fx
+                            estimated_cost = calculate_cost(amount_preview, execution_price) * fx
+                            if is_bond:
+                                estimated_accrued = product.calculate_accrued_interest(amount_preview, tx_date_preview) * fx
+                            else:
+                                estimated_accrued = 0.0
+
+                            if selected_template == "SELL":
+                                estimated_total = estimated_trade - estimated_cost + (estimated_accrued or 0.0)
+                            else:
+                                estimated_total = estimated_trade + estimated_cost + (estimated_accrued or 0.0)
+            except Exception:
+                # Preview should never block rendering.
+                pass
 
         products_by_type = {"bond": [], "stock": [], "option": [], "fund": [], "other": []}
         for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
@@ -477,6 +631,13 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             estimated_cost=estimated_cost,
             estimated_accrued=estimated_accrued,
             estimated_total=estimated_total,
+            order_draft_id=order_draft_id,
+            order_status=order_status,
+            order_warnings=order_warnings,
+            order_placeholder_messages=order_placeholder_messages,
+            actor_id=actor_id,
+            actor_role=actor_role,
+            actor_channel=actor_channel,
             format_currency=format_currency,
             error=error,
             success_message=success_message,
@@ -558,6 +719,56 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
             nav_query=nav_query(selected_client, selected_portfolio),
             active_page="instruments",
+        )
+
+    @app.route("/order-drafts", methods=["GET", "POST"])
+    def order_drafts_page():
+        if request.method == "POST":
+            selected_client_id = request.form.get("client_id", type=int)
+            selected_portfolio_id = request.form.get("portfolio_id", type=int)
+        else:
+            selected_client_id = request.args.get("client_id", type=int)
+            selected_portfolio_id = request.args.get("portfolio_id", type=int)
+
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+        cleanup_message = None
+        cleanup_error = None
+
+        if request.method == "POST" and request.form.get("action") == "cleanup":
+            confirm_cleanup = request.form.get("cleanup_confirm") == "1"
+            retention_override = request.form.get("retention_days", "").strip()
+
+            if not confirm_cleanup:
+                cleanup_error = "Bevestiging vereist: vink opschonen aan om door te gaan."
+            else:
+                try:
+                    cleanup_retention_days = retention_days
+                    if retention_override:
+                        cleanup_retention_days = int(retention_override)
+                    if cleanup_retention_days <= 0:
+                        raise ValueError("Retention moet groter zijn dan 0")
+                    deleted = order_database.purge_stale_order_drafts(retention_days=cleanup_retention_days)
+                    cleanup_message = f"Opschonen voltooid: {deleted} conceptorders verwijderd."
+                except ValueError:
+                    cleanup_error = "Retention heeft ongeldige waarde. Gebruik een geheel getal groter dan 0."
+
+        drafts = order_database.list_order_drafts(limit=200)
+        status_counts = order_database.get_order_draft_status_counts()
+
+        return render_template(
+            "order_drafts.html",
+            drafts=drafts,
+            status_counts=status_counts,
+            startup_purged_drafts=startup_purged_drafts,
+            retention_days=retention_days,
+            cleanup_message=cleanup_message,
+            cleanup_error=cleanup_error,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            active_page="order-drafts",
         )
 
     return app

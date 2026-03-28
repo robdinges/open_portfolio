@@ -119,6 +119,24 @@ document.addEventListener("DOMContentLoaded", function () {
   <input type="hidden" name="client_id" value="{{ selected_client_id }}">
   <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id }}">
   <input type="hidden" name="return_to" value="{{ return_to or '' }}">
+  <input type="hidden" name="order_draft_id" value="{{ order_draft_id or '' }}">
+  <input type="hidden" name="actor_id" value="{{ actor_id or '' }}">
+  <input type="hidden" name="actor_role" value="{{ actor_role or '' }}">
+  <input type="hidden" name="actor_channel" value="{{ actor_channel or 'web' }}">
+
+  <div class="form-row">
+    <label>Orderstatus</label>
+    <span>{{ order_status or 'Nieuw' }}{% if order_draft_id %} ({{ order_draft_id }}){% endif %}</span>
+  </div>
+
+  <div class="form-row">
+    <label>Order actor</label>
+    <span>
+      {% if actor_id %}{{ actor_id }}{% else %}onbekend{% endif %}
+      {% if actor_role %} - {{ actor_role }}{% endif %}
+      ({{ actor_channel or 'web' }})
+    </span>
+  </div>
 
   <div class="form-row">
     <label>Klant</label>
@@ -230,10 +248,30 @@ document.addEventListener("DOMContentLoaded", function () {
   </div>
 
   <div class="form-actions">
-    <button class="button" type="submit" name="save" value="1">Opslaan</button>
-    <button class="button cancel" type="submit" name="cancel" value="1">Annuleren</button>
+    <button class="button" type="submit" name="action" value="draft">Concept opslaan</button>
+    <button class="button" type="submit" name="action" value="confirm">Valideren en bevestigen</button>
+    <button class="button" type="submit" name="action" value="submit">Definitief boeken</button>
+    <button class="button cancel" type="submit" name="action" value="cancel">Annuleren</button>
   </div>
 </form>
+
+{% if order_warnings or order_placeholder_messages %}
+<div class="form-row">
+  <label>Bekende placeholders</label>
+  <div>
+    <ul>
+      {% for warning in order_warnings %}
+      <li>{{ warning }}</li>
+      {% endfor %}
+      {% if not order_warnings %}
+        {% for item in order_placeholder_messages %}
+        <li>{{ item }}</li>
+        {% endfor %}
+      {% endif %}
+    </ul>
+  </div>
+</div>
+{% endif %}
 
 {% if success_message %}<div class="success">{{ success_message }}</div>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}

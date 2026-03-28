@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Order Drafts - OpenPortfolio{% endblock %}
+{% block content %}
+<h2>Order Draft Monitoring</h2>
+<div class="context-grid">
+  <div class="label">Startup cleanup</div><div>{{ startup_purged_drafts }} conceptorders verwijderd</div>
+  <div class="label">Retention policy</div><div>{{ retention_days }} dagen</div>
+</div>
+
+<h3>Handmatig opschonen</h3>
+<form method="post">
+  <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
+  <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
+  <input type="hidden" name="action" value="cleanup">
+
+  <div class="form-row">
+    <label for="retention_days">Retention dagen</label>
+    <input type="number" name="retention_days" id="retention_days" min="1" step="1" placeholder="{{ retention_days }}" class="tx-short">
+  </div>
+  <div class="form-row">
+    <label for="cleanup_confirm">Bevestiging</label>
+    <input type="checkbox" name="cleanup_confirm" id="cleanup_confirm" value="1">
+    <span style="margin-left: 0.5em;">Ja, ik wil verouderde conceptorders verwijderen.</span>
+  </div>
+  <div class="form-actions">
+    <button class="button" type="submit">Opschonen uitvoeren</button>
+  </div>
+</form>
+
+{% if cleanup_message %}<div class="success">{{ cleanup_message }}</div>{% endif %}
+{% if cleanup_error %}<div class="error">{{ cleanup_error }}</div>{% endif %}
+
+<h3>Statusoverzicht</h3>
+<table>
+  <thead>
+    <tr><th>Status</th><th>Aantal</th></tr>
+  </thead>
+  <tbody>
+    {% for status, count in status_counts.items() %}
+      <tr><td>{{ status }}</td><td>{{ count }}</td></tr>
+    {% else %}
+      <tr><td colspan="2">Geen conceptorders beschikbaar.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h3>Laatste conceptorders</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Draft ID</th>
+      <th>Status</th>
+      <th>Portfolio</th>
+      <th>Template</th>
+      <th>Instrument</th>
+      <th>Actor</th>
+      <th>Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for d in drafts %}
+      <tr>
+        <td>{{ d.draft_id }}</td>
+        <td>{{ d.status }}</td>
+        <td>{{ d.portfolio_id }}</td>
+        <td>{{ d.payload.get('template', '-') }}</td>
+        <td>{{ d.payload.get('product_id', '-') }}</td>
+        <td>
+          {% set actor_id = d.payload.get('actor_id', '') %}
+          {% set actor_role = d.payload.get('actor_role', '') %}
+          {% set actor_channel = d.payload.get('actor_channel', 'web') %}
+          {% if actor_id %}{{ actor_id }}{% else %}onbekend{% endif %}
+          {% if actor_role %} - {{ actor_role }}{% endif %}
+          ({{ actor_channel }})
+        </td>
+        <td>{{ d.updated_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7">Geen conceptorders gevonden.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
