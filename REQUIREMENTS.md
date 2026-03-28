@@ -164,6 +164,61 @@ Het systeem ondersteunt:
 - Waardering gebruikt transacties + prijzen + FX.
 - Rendement en positie-informatie moet reproduceerbaar zijn vanuit DB-state.
 
+### FR-21 — Orderinvoer met instrumenttype-specifieke schermlogica
+
+- Het orderscherm onderscheidt minimaal instrumenttypes: `bond`, `stock`, `option`, `fund`.
+- De basisworkflow is voor alle instrumenttypes gelijk:
+  - impliciet of expliciet portefeuillecontext bepalen,
+  - instrument kiezen (zoekbare dropdown of prefill vanuit holdings),
+  - bestaande positie tonen (aantal of nominaal),
+  - transactiesoort kiezen (`BUY` of `SELL`),
+  - ordertype kiezen (`MARKET` of `LIMIT`),
+  - orderhoeveelheid invoeren en direct valideren op handelseenheid en minimale ordergrootte,
+  - rekeningselectie en ordersamenvatting tonen,
+  - bevestigen of annuleren.
+
+### FR-22 — Veld- en invoerregels orderformulier
+
+- UI toont bij orderhoeveelheid altijd eenheid en minimale ordergrootte van het instrument.
+- Voor obligaties wordt nominale waarde ingevoerd en instrumentvaluta achter het veld getoond.
+- Voor aandelen wordt aantal stuks ingevoerd zonder valutalabel achter het veld.
+- Voor obligaties met `LIMIT` order wordt limiet ingevoerd als percentage (bijv. `100,23` = `100,23%`).
+- Voor aandelen met `LIMIT` order wordt limiet ingevoerd als prijs met instrumentvaluta.
+- Voor opties en funds geldt voorlopig dezelfde limietnotatie als aandelen, tenzij productconfiguratie expliciet anders aangeeft.
+
+### FR-23 — Rekeningselectie en beschikbare saldi
+
+- Rekeningkeuze is beperkt tot instrumentvaluta en portefeuillevaluta.
+- Als instrumentvaluta gelijk is aan portefeuillevaluta:
+  - wordt alleen die valutarekening geselecteerd,
+  - is wijzigen van rekening niet toegestaan.
+- Als instrumentvaluta afwijkt van portefeuillevaluta:
+  - controleert systeem of instrumentvalutarekening bestaat,
+  - gebruiker kan kiezen tussen instrumentvalutarekening en portefeuillevalutarekening,
+  - andere valutarekeningen zijn niet toegestaan.
+- Bij elke selecteerbare rekening wordt het actuele beschikbare saldo getoond.
+
+### FR-24 — Berekeningen per order
+
+- Voor obligatieorders wordt meeverkochte of meegekochte rente berekend en getoond.
+- Voor elke order worden transactiekosten berekend volgens standaardmethode.
+- Voor elke order wordt totaalbedrag per valuta berekend en getoond.
+- Indien nodig worden koers en FX bepaald op basis van meest recente waarde op of voor transactiedatum.
+
+### FR-25 — Formuliergedrag, navigatie en input parsing
+
+- Gebruiker kan kiezen voor:
+  - akkoord: transactie vastleggen en navigeren naar transactieoverzicht,
+  - annuleren: formulier schonen en navigeren naar vorig scherm.
+- Decimalen mogen met komma of punt worden ingevoerd.
+- Bij wijziging van instrument worden afhankelijke velden erna geschoond en conditioneel opnieuw getoond.
+- Bij wijziging van transactiesoort worden afhankelijke velden erna geschoond en conditioneel opnieuw getoond.
+
+### FR-26 — Normatieve detailspecificatie orderinvoer
+
+- De volledige normatieve specificatie voor orderinvoer, veldvolgorde, validatieregels en UX-gedrag staat in `ORDER_ENTRY.md`.
+- Bij conflict tussen samenvatting in dit document en `ORDER_ENTRY.md` is `ORDER_ENTRY.md` leidend voor orderinvoer.
+
 ## 3) Niet-functionele requirements
 
 ### NFR-01 — Idempotentie

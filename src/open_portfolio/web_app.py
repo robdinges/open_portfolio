@@ -11,19 +11,15 @@ form to submit a BUY/SELL transaction.
 from __future__ import annotations
 import sys
 from datetime import date
-from html import escape
 
 try:
-    from flask import Flask, request, redirect, url_for, render_template, flash
+    from flask import Flask, request, redirect, url_for, render_template
 except Exception as e:  # pragma: no cover - runtime dependency
     Flask = None  # type: ignore
 
-from .clients import Client
 from .product_collection import ProductCollection
 from .transactions import TransactionManager
 from .enums import TransactionTemplate
-from .products import Stock, Bond
-from .prices import CurrencyPrices
 from .sample_data import create_realistic_dataset
 
 
@@ -38,7 +34,6 @@ def create_demo_data():
 
 
 # --- Currency formatting utility ---
-import locale
 
 def format_currency(amount, currency="EUR", symbol="€"):
     symbols = {
@@ -156,7 +151,36 @@ def make_app(client=None, product_collection=None, currency_prices=None):
         error = None
         success_message = None
 
-        def get_fx(from_currency, to_currency):
+        def parse_decimal(value: str, field_name: str) -> float:
+            text = (value or "").strip()
+            if not text:
+                raise ValueError(f"{field_name} is verplicht")
+            text = text.replace(" ", "").replace(",", ".")
+            try:
+                return float(text)
+            except ValueError as exc:
+                raise ValueError(f"{field_name} heeft geen geldig getal") from exc
+
+        def parse_optional_decimal(value: str) -> float | None:
+            text = (value or "").strip()
+            if not text:
+                return None
+            text = text.replace(" ", "").replace(",", ".")
+            return float(text)
+
+        def parse_tx_date(raw_value: str | None) -> date:
+            text = (raw_value or "").strip()
+            if not text:
+                return date.today()
+            parts = text.split("-")
+            if len(parts) != 3:
+                raise ValueError("Transactiedatum heeft ongeldig formaat (gebruik YYYY-MM-DD)")
+            try:
+                return date(int(parts[0]), int(parts[1]), int(parts[2]))
+            except ValueError as exc:
+                raise ValueError("Transactiedatum is ongeldig") from exc
+
+        def get_fx(from_currency: str, to_currency: str) -> float:
             if from_currency == to_currency:
                 return 1.0
             try:
@@ -167,148 +191,257 @@ def make_app(client=None, product_collection=None, currency_prices=None):
                 except Exception as exc:
                     raise ValueError(f"Geen wisselkoers beschikbaar voor {from_currency}/{to_currency}") from exc
 
+        def get_position_map(selected_portfolio):
+            result = {}
+            if not selected_portfolio or not selected_portfolio.securities_account:
+                return result
+            for holding in selected_portfolio.securities_account.holdings:
+                if isinstance(holding, dict) and holding.get("product"):
+                    pid = holding["product"].instrument_id
+                    amount = float(holding.get("amount", 0.0))
+                else:
+                    pid = getattr(getattr(holding, "product", None), "instrument_id", None)
+                    amount = float(getattr(holding, "amount", 0.0))
+                if pid is not None:
+                    result[pid] = amount
+            return result
+
+        def build_settlement_options(selected_portfolio, product):
+            options = []
+            locked = False
+            default_currency = getattr(selected_portfolio, "default_currency", "EUR") if selected_portfolio else "EUR"
+            if not selected_portfolio or not product:
+                return options, locked
+
+            cash_by_currency = {}
+            for (_, curr, atype), account in selected_portfolio.cash_accounts.items():
+                if atype.name == "CASH" and curr not in cash_by_currency:
+                    cash_by_currency[curr] = account
+
+            issue_currency = product.issue_currency
+            if issue_currency == default_currency:
+                account = cash_by_currency.get(default_currency)
+                if account:
+                    options.append({"currency": default_currency, "balance": account.balance})
+                locked = True
+                return options, locked
+
+            issue_account = cash_by_currency.get(issue_currency)
+            default_account = cash_by_currency.get(default_currency)
+            if issue_account:
+                options.append({"currency": issue_currency, "balance": issue_account.balance})
+            if default_account and default_currency != issue_currency:
+                options.append({"currency": default_currency, "balance": default_account.balance})
+            return options, locked
+
+        def is_multiple_of_unit(value: float, unit: float) -> bool:
+            if unit <= 0:
+                return True
+            quotient = value / unit
+            return abs(round(quotient) - quotient) <= 1e-9
+
+        def get_latest_price_for_date(product, tx_date: date) -> float:
+            price = product.get_price(tx_date)
+            if price is None:
+                raise ValueError("Geen koers beschikbaar op of voor transactiedatum")
+            return float(price)
+
+        def calculate_cost(amount: float, price: float) -> float:
+            return 0.01 * amount * price
+
+        def product_kind(product) -> str:
+            kind = getattr(getattr(product, "type", None), "name", "")
+            return kind.lower() if kind else "unknown"
+
+        def to_execution_price(product, displayed_price: float) -> float:
+            if product_kind(product) == "bond":
+                return displayed_price / 100.0
+            return displayed_price
+
         if request.method == "POST":
             selected_client_id = int(request.form.get("client_id", clients[0].client_id))
             selected_portfolio_id = int(request.form.get("portfolio_id", 0))
             selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
-            selected_template = request.form.get("template")
+            selected_template = request.form.get("template") or "BUY"
+            selected_order_type = request.form.get("order_type") or "MARKET"
             selected_product_id = request.form.get("product_id")
             selected_settlement_currency = request.form.get("settlement_currency")
             entered_amount = request.form.get("amount", "")
             entered_price = request.form.get("price", "")
+            entered_tx_date = request.form.get("transaction_date", date.today().isoformat())
             return_to = request.form.get("return_to", "")
-
-            if request.form.get("cancel") == "1":
-                if return_to == "holdings":
-                    return redirect(url_for("holdings_page", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
-                return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
-
-            if request.form.get("save") == "1":
-                try:
-                    if selected_portfolio is None:
-                        raise ValueError("Geen portefeuille geselecteerd")
-                    template = TransactionTemplate[selected_template]
-                    product_id = int(selected_product_id)
-                    amount = float(entered_amount or "0")
-                    price = float(entered_price or "0")
-                    product = product_collection.search_product_id(product_id)
-                    if product is None:
-                        raise ValueError("Instrument niet gevonden")
-                    if not selected_settlement_currency:
-                        selected_settlement_currency = product.issue_currency
-
-                    if amount <= 0:
-                        raise ValueError("Aantal moet groter zijn dan 0")
-                    if price < 0:
-                        raise ValueError("Prijs kan niet negatief zijn")
-
-                    if template == TransactionTemplate.SELL:
-                        holding = next((
-                            h for h in selected_portfolio.securities_account.holdings
-                            if (
-                                (isinstance(h, dict) and h.get("product") and h["product"].instrument_id == product_id)
-                                or (not isinstance(h, dict) and getattr(getattr(h, "product", None), "instrument_id", None) == product_id)
-                            )
-                        ), None)
-                        if isinstance(holding, dict):
-                            available_amount = float(holding.get("amount", 0.0))
-                        else:
-                            available_amount = float(getattr(holding, "amount", 0.0)) if holding is not None else 0.0
-                        if amount > available_amount:
-                            raise ValueError("Onvoldoende positie voor verkoop")
-
-                    exchange_rate = get_fx(product.issue_currency, selected_settlement_currency)
-
-                    tx_manager.create_and_execute_transaction(
-                        transaction_date=date.today(),
-                        portfolio_id=selected_portfolio.portfolio_id,
-                        template=template,
-                        portfolio=selected_portfolio,
-                        product_collection=product_collection,
-                        currency_prices=currency_prices,
-                        product_id=product_id,
-                        amount=amount,
-                        price=price,
-                        transaction_currency=selected_settlement_currency,
-                        exchange_rate=exchange_rate,
-                        settlement_currency=selected_settlement_currency,
-                    )
-                    success_message = "Transactie succesvol opgeslagen"
-                    return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
-                except Exception as exc:
-                    error = str(exc)
         else:
             selected_client_id = int(request.args.get("client_id", clients[0].client_id))
             fallback_portfolio_id = clients[0].portfolios[0].portfolio_id if clients and clients[0].portfolios else 0
             selected_portfolio_id = int(request.args.get("portfolio_id", fallback_portfolio_id))
             selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
-            selected_template = request.args.get("template")
+            selected_template = request.args.get("template") or "BUY"
+            selected_order_type = request.args.get("order_type") or "MARKET"
             selected_product_id = request.args.get("product_id")
             selected_settlement_currency = request.args.get("settlement_currency")
             entered_amount = request.args.get("amount", "")
             entered_price = request.args.get("price", "")
+            entered_tx_date = request.args.get("transaction_date", date.today().isoformat())
+            return_to = request.args.get("return_to", "")
+
         if selected_product_id:
             try:
                 selected_product_id = int(selected_product_id)
             except Exception:
-                pass
-        if request.method != "POST":
-            return_to = request.args.get("return_to", "")
-        if request.method == "POST" and 'return_to' not in locals():
-            return_to = request.form.get("return_to", "")
-        cash_accounts = []
-        settlement_currencies = []
-        selected_settlement_balance = None
-        if selected_portfolio and hasattr(selected_portfolio, 'cash_accounts'):
-            for (aid, curr, atype), acc in selected_portfolio.cash_accounts.items():
-                acc.aid = aid
-                acc.curr = curr
-                acc.atype = atype
-                cash_accounts.append(acc)
-                if atype.name == "CASH" and curr not in settlement_currencies:
-                    settlement_currencies.append(curr)
+                selected_product_id = None
+
+        # Keep backend state aligned with the first visible instrument so
+        # settlement account options are always determinable.
+        if selected_product_id is None and product_collection.products:
+            selected_product_id = sorted(product_collection.products.keys())[0]
 
         product = product_collection.search_product_id(selected_product_id) if selected_product_id else None
-        if not selected_settlement_currency:
-            if product and product.issue_currency in settlement_currencies:
-                selected_settlement_currency = product.issue_currency
-            elif settlement_currencies:
-                selected_settlement_currency = settlement_currencies[0]
+        position_by_product = get_position_map(selected_portfolio)
+        current_position = position_by_product.get(selected_product_id, 0.0) if selected_product_id else 0.0
 
-        selected_cash_account = None
-        for acc in cash_accounts:
-            if acc.curr == selected_settlement_currency:
-                selected_cash_account = acc
-                selected_settlement_balance = acc.balance
+        settlement_options, settlement_locked = build_settlement_options(selected_portfolio, product)
+        allowed_settlement_currencies = [opt["currency"] for opt in settlement_options]
+        if not selected_settlement_currency and allowed_settlement_currencies:
+            selected_settlement_currency = allowed_settlement_currencies[0]
+        if selected_settlement_currency not in allowed_settlement_currencies and allowed_settlement_currencies:
+            selected_settlement_currency = allowed_settlement_currencies[0]
+
+        selected_settlement_balance = None
+        for opt in settlement_options:
+            if opt["currency"] == selected_settlement_currency:
+                selected_settlement_balance = opt["balance"]
                 break
 
-        current_position = 0.0
-        position_by_product = {}
-        if selected_portfolio and selected_portfolio.securities_account:
-            for h in selected_portfolio.securities_account.holdings:
-                if isinstance(h, dict) and h.get("product"):
-                    pid = h["product"].instrument_id
-                    amt = float(h.get("amount", 0.0))
-                else:
-                    pid = getattr(getattr(h, "product", None), "instrument_id", None)
-                    amt = float(getattr(h, "amount", 0.0))
-                if pid is not None:
-                    position_by_product[pid] = amt
-            if selected_product_id in position_by_product:
-                current_position = position_by_product[selected_product_id]
+        current_product_kind = product_kind(product) if product else "unknown"
+        is_bond = current_product_kind == "bond"
+        amount_label = "Nominale waarde" if is_bond else "Aantal"
+        amount_unit = product.smallest_trading_unit if product else None
+        minimum_order_size = product.minimum_purchase_value if product else None
+        amount_suffix = product.issue_currency if is_bond and product else ""
 
-        kosteninschatting = "-"
-        amount_raw = request.form.get("amount") if request.method == "POST" else request.args.get("amount")
-        price_raw = request.form.get("price") if request.method == "POST" else request.args.get("price")
+        show_price_input = selected_order_type == "LIMIT"
+        limit_suffix = "%" if is_bond and selected_order_type == "LIMIT" else (product.issue_currency if selected_order_type == "LIMIT" and product else "")
+
+        estimated_trade = None
+        estimated_cost = None
+        estimated_accrued = None
+        estimated_total = None
+        used_price = None
+
+        if request.method == "POST" and request.form.get("cancel") == "1":
+            if return_to == "holdings":
+                return redirect(url_for("holdings_page", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+            return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+
+        if request.method == "POST" and request.form.get("save") == "1":
+            try:
+                if selected_portfolio is None:
+                    raise ValueError("Geen portefeuille geselecteerd")
+                if product is None:
+                    raise ValueError("Instrument niet gevonden")
+                if selected_template not in {"BUY", "SELL"}:
+                    raise ValueError("Ongeldige transactiesoort")
+                if selected_order_type not in {"MARKET", "LIMIT"}:
+                    raise ValueError("Ongeldig ordertype")
+
+                tx_date = parse_tx_date(entered_tx_date)
+                amount = parse_decimal(entered_amount, amount_label)
+                if amount <= 0:
+                    raise ValueError(f"{amount_label} moet groter zijn dan 0")
+
+                template = TransactionTemplate[selected_template]
+                if template == TransactionTemplate.SELL and amount > current_position:
+                    raise ValueError("Onvoldoende positie voor verkoop")
+
+                if amount_unit and not is_multiple_of_unit(amount, float(amount_unit)):
+                    raise ValueError(f"{amount_label} moet een veelvoud zijn van handelseenheid {amount_unit}")
+                if template == TransactionTemplate.BUY and minimum_order_size and amount < float(minimum_order_size):
+                    raise ValueError(f"{amount_label} moet minimaal {minimum_order_size} zijn")
+
+                if selected_order_type == "LIMIT":
+                    limit_price = parse_decimal(entered_price, "Limiet")
+                    if limit_price <= 0:
+                        raise ValueError("Limiet moet groter zijn dan 0")
+                    displayed_price = limit_price
+                else:
+                    displayed_price = get_latest_price_for_date(product, tx_date)
+                    entered_price = f"{displayed_price:.6f}".rstrip("0").rstrip(".")
+
+                price = to_execution_price(product, displayed_price)
+
+                if selected_settlement_currency not in allowed_settlement_currencies:
+                    raise ValueError("Ongeldige afrekenrekening gekozen")
+                if not selected_settlement_currency:
+                    raise ValueError("Geen afrekenrekening beschikbaar voor deze order")
+
+                exchange_rate = get_fx(product.issue_currency, selected_settlement_currency)
+
+                trade_amount_settlement = amount * price * exchange_rate
+                cost_settlement = calculate_cost(amount, price) * exchange_rate
+                accrued_settlement = 0.0
+                if is_bond:
+                    accrued_settlement = product.calculate_accrued_interest(amount, tx_date) * exchange_rate
+
+                if template == TransactionTemplate.BUY:
+                    estimated_cash_impact = trade_amount_settlement + cost_settlement + max(accrued_settlement, 0)
+                    if selected_settlement_balance is not None and estimated_cash_impact > float(selected_settlement_balance):
+                        raise ValueError("Onvoldoende beschikbaar saldo op gekozen rekening")
+
+                tx_manager.create_and_execute_transaction(
+                    transaction_date=tx_date,
+                    portfolio_id=selected_portfolio.portfolio_id,
+                    template=template,
+                    portfolio=selected_portfolio,
+                    product_collection=product_collection,
+                    currency_prices=currency_prices,
+                    product_id=product.instrument_id,
+                    amount=amount,
+                    price=price,
+                    transaction_currency=selected_settlement_currency,
+                    exchange_rate=exchange_rate,
+                    settlement_currency=selected_settlement_currency,
+                )
+
+                success_message = "Transactie succesvol opgeslagen"
+                return redirect(url_for("transactions", client_id=selected_client.client_id, portfolio_id=selected_portfolio.portfolio_id))
+            except Exception as exc:
+                error = str(exc)
+
         try:
-            amount_val = float(amount_raw) if amount_raw else 0.0
-            price_val = float(price_raw) if price_raw else 0.0
-            if amount_val > 0 and price_val >= 0 and product is not None and selected_settlement_currency:
-                cost_in_product_currency = 0.01 * amount_val * price_val
-                fx = get_fx(product.issue_currency, selected_settlement_currency)
-                kosteninschatting = format_currency(cost_in_product_currency * fx, selected_settlement_currency)
+            if product and selected_settlement_currency:
+                tx_date_preview = parse_tx_date(entered_tx_date)
+                amount_preview = parse_optional_decimal(entered_amount)
+                if amount_preview and amount_preview > 0:
+                    if selected_order_type == "MARKET":
+                        used_price = get_latest_price_for_date(product, tx_date_preview)
+                    else:
+                        limit_preview = parse_optional_decimal(entered_price)
+                        used_price = limit_preview if limit_preview is not None else None
+
+                    if used_price is not None and used_price > 0:
+                        execution_price = to_execution_price(product, used_price)
+                        fx = get_fx(product.issue_currency, selected_settlement_currency)
+                        estimated_trade = amount_preview * execution_price * fx
+                        estimated_cost = calculate_cost(amount_preview, execution_price) * fx
+                        if is_bond:
+                            estimated_accrued = product.calculate_accrued_interest(amount_preview, tx_date_preview) * fx
+                        else:
+                            estimated_accrued = 0.0
+
+                        if selected_template == "SELL":
+                            estimated_total = estimated_trade - estimated_cost + (estimated_accrued or 0.0)
+                        else:
+                            estimated_total = estimated_trade + estimated_cost + (estimated_accrued or 0.0)
         except Exception:
-            kosteninschatting = "-"
+            # Preview should never block rendering.
+            pass
+
+        products_by_type = {"bond": [], "stock": [], "option": [], "fund": [], "other": []}
+        for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
+            kind = product_kind(prod)
+            if kind not in products_by_type:
+                kind = "other"
+            products_by_type[kind].append((pid, prod))
 
         return render_template(
             "transaction_form.html",
@@ -317,22 +450,33 @@ def make_app(client=None, product_collection=None, currency_prices=None):
             selected_portfolio=selected_portfolio,
             templates=[TransactionTemplate.BUY, TransactionTemplate.SELL],
             products=product_collection.products,
+            products_by_type=products_by_type,
             selected_client_id=selected_client_id,
             selected_portfolio_id=selected_portfolio_id,
             selected_template=selected_template,
+            selected_order_type=selected_order_type,
             selected_product_id=selected_product_id,
             amount=entered_amount,
             price=entered_price,
-            cash_accounts=cash_accounts,
-            settlement_currencies=settlement_currencies,
+            transaction_date=entered_tx_date,
+            settlement_options=settlement_options,
             selected_settlement_currency=selected_settlement_currency,
             selected_settlement_balance=selected_settlement_balance,
-            selected_cash_account=selected_cash_account,
+            settlement_locked=settlement_locked,
             current_position=current_position,
             position_by_product=position_by_product,
-            kosteninschatting=kosteninschatting,
-            show_amount=True,
-            amount_label=None,
+            amount_label=amount_label,
+            amount_suffix=amount_suffix,
+            amount_unit=amount_unit,
+            minimum_order_size=minimum_order_size,
+            show_price_input=show_price_input,
+            limit_suffix=limit_suffix,
+            current_product_kind=current_product_kind,
+            used_price=used_price,
+            estimated_trade=estimated_trade,
+            estimated_cost=estimated_cost,
+            estimated_accrued=estimated_accrued,
+            estimated_total=estimated_total,
             format_currency=format_currency,
             error=error,
             success_message=success_message,

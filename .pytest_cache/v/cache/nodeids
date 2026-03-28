@@ -13,7 +13,13 @@
   "tests/test_transactions.py::TestTransactions::test_stock_transaction",
   "tests/test_transactions.py::TestTransactions::test_transaction_values",
   "tests/test_transactions.py::test_two_buys_and_balance",
+  "tests/test_web_app.py::test_bond_limit_price_percent_is_converted_to_decimal_for_execution",
+  "tests/test_web_app.py::test_form_contains_dependent_field_reset_javascript",
   "tests/test_web_app.py::test_index_page_contains_portfolio",
+  "tests/test_web_app.py::test_limit_bond_form_shows_percent_suffix_and_nominal_label",
+  "tests/test_web_app.py::test_market_sell_accepts_decimal_comma_and_redirects",
+  "tests/test_web_app.py::test_same_currency_settlement_account_is_locked",
   "tests/test_web_app.py::test_sell_with_insufficient_position_shows_error",
+  "tests/test_web_app.py::test_settlement_account_populated_on_initial_form_load",
   "tests/test_web_app.py::test_transaction_summary_shown"
 ]

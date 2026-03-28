@@ -68,6 +68,26 @@
 - UI toont huidige positie bij selectie instrument.
 - Fouten voorkomen i.p.v. tonen (preventieve validatie).
 
+## Order Entry & Validatie
+- Orderscherm maakt onderscheid tussen instrumenttypes: obligatie, aandeel, optie, fund.
+- Workflow blijft gelijk: portefeuille -> instrument -> transactiesoort -> ordertype -> hoeveelheid -> afrekenrekening -> bevestigen/annuleren.
+- Instrumentkeuze ondersteunt prefill vanuit holdings en zoekbare selectie.
+- Na instrumentkeuze altijd positie tonen (stuks of nominaal).
+- Validatie op handelseenheid en minimale ordergrootte gebeurt direct na invoer.
+- Invoervelden tonen contextlabels:
+  - hoeveelheidseenheid,
+  - minimale ordergrootte,
+  - valuta of `%` waar van toepassing.
+- Rekeningkeuze wordt beperkt tot instrumentvaluta en portefeuillevaluta, met zichtbaar beschikbaar saldo.
+- Als instrumentvaluta gelijk is aan portefeuillevaluta is de rekening vast en niet wijzigbaar.
+- Voor obligaties opgelopen rente tonen zodra benodigde ordervelden ingevuld zijn.
+- Voor elke order transactiekosten en totaalbedrag per valuta tonen.
+- Bij wisselkoers of koersgebruik altijd meest recente waarde op of voor transactiedatum gebruiken.
+- Decimale invoer accepteert komma en punt.
+- Bij wijziging van instrument of transactiesoort afhankelijke velden resetten en conditioneel opnieuw tonen.
+- Akkoord navigeert naar transactiescherm; annuleren navigeert terug naar vorige scherm en schoont formulier.
+- Normatieve detailregels voor orderinvoer staan in `ORDER_ENTRY.md`.
+
 ## Feedback & flow
 - Na succesvolle transactie: redirect naar transactiescherm of holdings.
 - Vanuit holdings:

@@ -10,7 +10,7 @@ def test_realistic_dataset_creation():
     
     assert len(dataset['clients']) == 2
     assert len(dataset['portfolios']) == 3
-    assert len(dataset['products']) == 9
+    assert len(dataset['products']) == 27
     assert len(dataset['transactions']) >= 10
     
     # Verify clients
