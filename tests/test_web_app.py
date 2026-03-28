@@ -439,3 +439,101 @@ def test_order_drafts_manual_cleanup_deletes_stale_drafts(tmp_path):
 
     assert db.get_order_draft("OD-001222") is None
     db.close()
+
+
+def test_instruments_page_can_add_option_and_save_stock():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        add_resp = c.post(
+            "/instruments",
+            data={
+                "client_id": "1",
+                "portfolio_id": "1",
+                "action": "add",
+                "instrument_id": "909001",
+                "description": "Test Option Instrument",
+                "instrument_type": "OPTION",
+                "issue_currency": "USD",
+                "minimum_purchase_value": "1",
+                "smallest_trading_unit": "1",
+            },
+        )
+        assert add_resp.status_code == 200
+        assert "Instrument toegevoegd" in add_resp.get_data(as_text=True)
+
+        save_resp = c.post(
+            "/instruments",
+            data={
+                "client_id": "1",
+                "portfolio_id": "1",
+                "action": "save",
+                "instrument_id": "5",
+                "description": "AAPL Updated",
+                "instrument_type": "STOCK",
+                "issue_currency": "USD",
+                "minimum_purchase_value": "1",
+                "smallest_trading_unit": "1",
+            },
+        )
+        assert save_resp.status_code == 200
+        assert "Instrument opgeslagen" in save_resp.get_data(as_text=True)
+
+    option_product = pc.search_product_id(909001)
+    assert option_product is not None
+    assert option_product.type.name == "OPTION"
+    updated_stock = pc.search_product_id(5)
+    assert updated_stock is not None
+    assert updated_stock.description == "AAPL Updated"
+
+
+def test_instrument_add_persists_across_app_instances(tmp_path):
+    clients, products_list, prices = create_demo_data()
+    pc1 = ProductCollection()
+    for prod in products_list:
+        pc1.add_product(prod)
+
+    db_path = tmp_path / "instrument_persistence.db"
+    db1 = Database(str(db_path))
+
+    app1 = make_app(clients, pc1, prices, order_database=db1)
+    with app1.test_client() as c:
+        response = c.post(
+            "/instruments",
+            data={
+                "client_id": "1",
+                "portfolio_id": "1",
+                "action": "add",
+                "instrument_id": "909777",
+                "description": "Persistent Fund",
+                "instrument_type": "FUND",
+                "issue_currency": "EUR",
+                "minimum_purchase_value": "1",
+                "smallest_trading_unit": "1",
+            },
+        )
+        assert response.status_code == 200
+        assert "Instrument toegevoegd" in response.get_data(as_text=True)
+
+    db1.close()
+
+    pc2 = ProductCollection()
+    for prod in products_list:
+        pc2.add_product(prod)
+
+    db2 = Database(str(db_path))
+    app2 = make_app(clients, pc2, prices, order_database=db2)
+    with app2.test_client() as c:
+        response = c.get("/instruments?client_id=1&portfolio_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Persistent Fund" in html
+
+    loaded = pc2.search_product_id(909777)
+    assert loaded is not None
+    assert loaded.type.name == "FUND"
+    db2.close()

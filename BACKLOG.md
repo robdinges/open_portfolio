@@ -89,6 +89,10 @@ Datum: 2026-03-07
    - OE-GAP-003: intraday prijsversheid voor market orders.
    - OE-GAP-004: uitgebreide audit actor context.
 
+10. **Instrument lifecycle persistentie (opgeleverd)**
+   - Add/edit/save op instrumentscherm schrijft nu naar SQLite.
+   - Bij app-start worden instrumentwijzigingen uit DB teruggeladen in de productcollectie.
+
 ## Could
 
 1. **Rendementsmodule TWR/MWR**

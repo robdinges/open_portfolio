@@ -2,18 +2,79 @@
 {% block title %}Instruments - OpenPortfolio{% endblock %}
 {% block content %}
 <h2>Instruments</h2>
+
+{% if instrument_message %}<div class="success">{{ instrument_message }}</div>{% endif %}
+{% if instrument_error %}<div class="error">{{ instrument_error }}</div>{% endif %}
+
+<h3>Nieuw instrument toevoegen</h3>
+<form method="post">
+  <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
+  <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
+  <input type="hidden" name="action" value="add">
+
+  <div class="form-row"><label for="new_instrument_id">Instrument ID</label><input id="new_instrument_id" name="instrument_id" required></div>
+  <div class="form-row"><label for="new_description">Omschrijving</label><input id="new_description" name="description" required></div>
+  <div class="form-row">
+    <label for="new_instrument_type">Type</label>
+    <select id="new_instrument_type" name="instrument_type" required>
+      {% for t in instrument_types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="form-row"><label for="new_currency">Valuta</label><input id="new_currency" name="issue_currency" value="EUR" required></div>
+  <div class="form-row"><label for="new_min">Minimale ordergrootte</label><input id="new_min" name="minimum_purchase_value" value="1" required></div>
+  <div class="form-row"><label for="new_unit">Handelseenheid</label><input id="new_unit" name="smallest_trading_unit" value="1" required></div>
+  <div class="form-row"><label for="new_start">Startdatum (bond)</label><input id="new_start" type="date" name="start_date"></div>
+  <div class="form-row"><label for="new_maturity">Einddatum (bond)</label><input id="new_maturity" type="date" name="maturity_date"></div>
+  <div class="form-row"><label for="new_rate">Couponrente (bond)</label><input id="new_rate" name="interest_rate"></div>
+  <div class="form-row">
+    <label for="new_freq">Couponfrequentie (bond)</label>
+    <select id="new_freq" name="interest_payment_frequency">
+      {% for f in payment_frequencies %}<option value="{{ f }}">{{ f }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="form-actions"><button class="button" type="submit">Instrument toevoegen</button></div>
+</form>
+
+<h3>Bestaande instrumenten bewerken</h3>
 <table>
   <thead>
-    <tr><th>ID</th><th>Description</th><th>Type</th><th>Currency</th></tr>
+    <tr><th>ID</th><th>Omschrijving</th><th>Type</th><th>Valuta</th><th>Min</th><th>Unit</th><th>Bond velden</th><th>Actie</th></tr>
   </thead>
   <tbody>
-    {% for pid, prod in products.items() %}
+    {% for ins in instruments %}
     <tr>
-      <td>{{ pid }}</td>
-      <td>{{ prod.description }}</td>
-      <td>{{ prod.__class__.__name__ }}</td>
-      <td>{{ prod.issue_currency }}</td>
+      <form method="post">
+        <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
+        <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
+        <input type="hidden" name="action" value="save">
+        <td><input name="instrument_id" value="{{ ins.instrument_id }}" readonly></td>
+        <td><input name="description" value="{{ ins.description }}" required></td>
+        <td>
+          <select name="instrument_type" required>
+            {% for t in instrument_types %}
+            <option value="{{ t }}" {% if t == ins.instrument_type %}selected{% endif %}>{{ t }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td><input name="issue_currency" value="{{ ins.issue_currency }}" required></td>
+        <td><input name="minimum_purchase_value" value="{{ ins.minimum_purchase_value }}" required></td>
+        <td><input name="smallest_trading_unit" value="{{ ins.smallest_trading_unit }}" required></td>
+        <td>
+          <input type="date" name="start_date" value="{{ ins.start_date.isoformat() if ins.start_date else '' }}">
+          <input type="date" name="maturity_date" value="{{ ins.maturity_date.isoformat() if ins.maturity_date else '' }}">
+          <input name="interest_rate" value="{{ ins.interest_rate if ins.interest_rate is not none else '' }}" placeholder="coupon">
+          <select name="interest_payment_frequency">
+            {% for f in payment_frequencies %}
+            <option value="{{ f }}" {% if f == ins.interest_payment_frequency %}selected{% endif %}>{{ f }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td><button class="button" type="submit">Opslaan</button></td>
+      </form>
     </tr>
+    {% else %}
+    <tr><td colspan="8">Geen instrumenten gevonden.</td></tr>
     {% endfor %}
   </tbody>
 </table>

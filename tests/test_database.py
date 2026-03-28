@@ -1,4 +1,5 @@
 import os
+import threading
 from datetime import datetime, UTC, timedelta
 
 import pytest
@@ -134,5 +135,61 @@ def test_database_order_draft_status_counts_and_list(tmp_path):
     listed = db.list_order_drafts(limit=2)
     assert len(listed) == 2
     assert all("draft_id" in row for row in listed)
+
+    db.close()
+
+
+def test_database_allows_cross_thread_usage_for_order_drafts(tmp_path):
+    db_file = tmp_path / "orders_thread.db"
+    db = Database(str(db_file))
+
+    result = {"ok": False, "error": ""}
+
+    def worker():
+        try:
+            db.upsert_order_draft(
+                draft_id="OD-THREAD-1",
+                portfolio_id=1,
+                status="draft",
+                payload={"template": "BUY"},
+            )
+            stored = db.get_order_draft("OD-THREAD-1")
+            result["ok"] = stored is not None
+        except Exception as exc:  # pragma: no cover - diagnostic capture
+            result["error"] = str(exc)
+
+    t = threading.Thread(target=worker)
+    t.start()
+    t.join()
+
+    assert result["ok"], result["error"]
+    db.close()
+
+
+def test_database_instrument_persistence_roundtrip(tmp_path):
+    db_file = tmp_path / "instrument_roundtrip.db"
+    db = Database(str(db_file))
+
+    db.upsert_instrument(
+        {
+            "instrument_id": 987001,
+            "description": "Roundtrip Option",
+            "instrument_type": "OPTION",
+            "issue_currency": "USD",
+            "minimum_purchase_value": 1,
+            "smallest_trading_unit": 1,
+            "start_date": None,
+            "maturity_date": None,
+            "interest_rate": None,
+            "interest_payment_frequency": None,
+        }
+    )
+
+    rows = db.list_instruments()
+    row = next((r for r in rows if r["instrument_id"] == 987001), None)
+    assert row is not None
+    assert row["description"] == "Roundtrip Option"
+    assert row["instrument_type"] == "OPTION"
+    assert row["issue_currency"] == "USD"
 
     db.close()

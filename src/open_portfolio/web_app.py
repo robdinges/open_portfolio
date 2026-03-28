@@ -21,7 +21,8 @@ except Exception as e:  # pragma: no cover - runtime dependency
 from .product_collection import ProductCollection
 from .database import Database
 from .transactions import TransactionManager
-from .enums import TransactionTemplate
+from .enums import TransactionTemplate, InstrumentType, PaymentFrequency
+from .products import Product, Bond, Stock
 from .order_entry import DatabaseOrderRepository, OrderStatus, placeholder_messages
 from .sample_data import create_realistic_dataset
 
@@ -70,7 +71,10 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
     app = Flask(__name__)
     tx_manager = TransactionManager()
     if order_database is None:
-        default_order_db_path = os.getenv("OPEN_PORTFOLIO_ORDER_DB_PATH", "open_portfolio_orders.sqlite3")
+        if os.getenv("PYTEST_CURRENT_TEST"):
+            default_order_db_path = ":memory:"
+        else:
+            default_order_db_path = os.getenv("OPEN_PORTFOLIO_ORDER_DB_PATH", "open_portfolio_orders.sqlite3")
         order_database = Database(default_order_db_path)
 
     retention_raw = os.getenv("OPEN_PORTFOLIO_ORDER_DRAFT_RETENTION_DAYS", "30")
@@ -81,6 +85,59 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
     startup_purged_drafts = order_database.purge_stale_order_drafts(retention_days=retention_days)
 
     order_repo = DatabaseOrderRepository(order_database)
+
+    def restore_instruments_from_db():
+        stored_instruments = order_database.list_instruments()
+        for row in stored_instruments:
+            instrument_type = (row.get("instrument_type") or "").upper()
+            instrument_id = int(row["instrument_id"])
+            description = row["description"]
+            issue_currency = (row.get("issue_currency") or "EUR").upper()
+            minimum_purchase_value = float(row.get("minimum_purchase_value") or 1.0)
+            smallest_trading_unit = float(row.get("smallest_trading_unit") or 1.0)
+
+            if instrument_type == "BOND":
+                start_date_raw = row.get("start_date")
+                maturity_date_raw = row.get("maturity_date")
+                if not start_date_raw or not maturity_date_raw:
+                    continue
+                try:
+                    frequency = PaymentFrequency[(row.get("interest_payment_frequency") or "YEAR").upper()]
+                except KeyError:
+                    frequency = PaymentFrequency.YEAR
+                product = Bond(
+                    instrument_id=instrument_id,
+                    description=description,
+                    minimum_purchase_value=minimum_purchase_value,
+                    smallest_trading_unit=smallest_trading_unit,
+                    issue_currency=issue_currency,
+                    start_date=date.fromisoformat(start_date_raw),
+                    maturity_date=date.fromisoformat(maturity_date_raw),
+                    interest_rate=float(row.get("interest_rate") or 0.0),
+                    interest_payment_frequency=frequency,
+                )
+            elif instrument_type == "STOCK":
+                product = Stock(
+                    product_id=instrument_id,
+                    description=description,
+                    minimum_purchase_value=minimum_purchase_value,
+                    smallest_trading_unit=smallest_trading_unit,
+                    issue_currency=issue_currency,
+                )
+            elif instrument_type in {"OPTION", "FUND"}:
+                product = Product(
+                    instrument_id=instrument_id,
+                    description=description,
+                    product_type=InstrumentType[instrument_type],
+                    minimum_purchase_value=minimum_purchase_value,
+                    smallest_trading_unit=smallest_trading_unit,
+                    issue_currency=issue_currency,
+                )
+            else:
+                continue
+            product_collection.add_product(product)
+
+    restore_instruments_from_db()
 
     def resolve_context(client_id=None, portfolio_id=None):
         selected_client = None
@@ -705,14 +762,161 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             active_page="accounts",
         )
 
-    @app.route("/instruments")
+    @app.route("/instruments", methods=["GET", "POST"])
     def instruments_page():
-        selected_client_id = request.args.get("client_id", type=int)
-        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        if request.method == "POST":
+            selected_client_id = request.form.get("client_id", type=int)
+            selected_portfolio_id = request.form.get("portfolio_id", type=int)
+        else:
+            selected_client_id = request.args.get("client_id", type=int)
+            selected_portfolio_id = request.args.get("portfolio_id", type=int)
+
         selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+        instrument_message = None
+        instrument_error = None
+
+        def parse_float(value: str, field_name: str) -> float:
+            text = (value or "").strip().replace(" ", "").replace(",", ".")
+            if not text:
+                raise ValueError(f"{field_name} is verplicht")
+            try:
+                return float(text)
+            except ValueError as exc:
+                raise ValueError(f"{field_name} heeft geen geldig getal") from exc
+
+        def parse_int(value: str, field_name: str) -> int:
+            text = (value or "").strip()
+            if not text:
+                raise ValueError(f"{field_name} is verplicht")
+            try:
+                return int(text)
+            except ValueError as exc:
+                raise ValueError(f"{field_name} heeft geen geldig geheel getal") from exc
+
+        def parse_date_required(value: str, field_name: str) -> date:
+            text = (value or "").strip()
+            if not text:
+                raise ValueError(f"{field_name} is verplicht")
+            try:
+                return date.fromisoformat(text)
+            except ValueError as exc:
+                raise ValueError(f"{field_name} heeft ongeldig formaat (YYYY-MM-DD)") from exc
+
+        def build_product_from_form(form_data, existing_product=None):
+            instrument_id = parse_int(form_data.get("instrument_id", ""), "Instrument ID")
+            description = (form_data.get("description", "") or "").strip()
+            if not description:
+                raise ValueError("Omschrijving is verplicht")
+
+            instrument_type_text = (form_data.get("instrument_type", "") or "").strip().upper()
+            if instrument_type_text not in {"BOND", "STOCK", "OPTION", "FUND"}:
+                raise ValueError("Instrumenttype is ongeldig")
+
+            currency = (form_data.get("issue_currency", "") or "").strip().upper()
+            if not currency:
+                raise ValueError("Valuta is verplicht")
+
+            min_purchase = parse_float(form_data.get("minimum_purchase_value", ""), "Minimale ordergrootte")
+            trading_unit = parse_float(form_data.get("smallest_trading_unit", ""), "Handelseenheid")
+
+            if instrument_type_text == "BOND":
+                start_date_value = parse_date_required(form_data.get("start_date", ""), "Startdatum")
+                maturity_date_value = parse_date_required(form_data.get("maturity_date", ""), "Einddatum")
+                interest_rate = parse_float(form_data.get("interest_rate", ""), "Couponrente")
+                frequency_text = (form_data.get("interest_payment_frequency", "YEAR") or "YEAR").strip().upper()
+                try:
+                    frequency = PaymentFrequency[frequency_text]
+                except KeyError as exc:
+                    raise ValueError("Couponfrequentie is ongeldig") from exc
+
+                return Bond(
+                    instrument_id=instrument_id,
+                    description=description,
+                    minimum_purchase_value=min_purchase,
+                    smallest_trading_unit=trading_unit,
+                    issue_currency=currency,
+                    start_date=start_date_value,
+                    maturity_date=maturity_date_value,
+                    interest_rate=interest_rate,
+                    interest_payment_frequency=frequency,
+                )
+
+            if instrument_type_text == "STOCK":
+                return Stock(
+                    product_id=instrument_id,
+                    description=description,
+                    minimum_purchase_value=min_purchase,
+                    smallest_trading_unit=trading_unit,
+                    issue_currency=currency,
+                )
+
+            option_or_fund_type = InstrumentType[instrument_type_text]
+            return Product(
+                instrument_id=instrument_id,
+                description=description,
+                product_type=option_or_fund_type,
+                minimum_purchase_value=min_purchase,
+                smallest_trading_unit=trading_unit,
+                issue_currency=currency,
+            )
+
+        if request.method == "POST":
+            action = (request.form.get("action") or "").strip().lower()
+            try:
+                if action in {"add", "save"}:
+                    product = build_product_from_form(request.form)
+                    existing = product_collection.search_product_id(product.instrument_id)
+                    if action == "add" and existing is not None:
+                        raise ValueError("Instrument ID bestaat al")
+                    product_collection.add_product(product)
+
+                    instrument_payload = {
+                        "instrument_id": product.instrument_id,
+                        "description": product.description,
+                        "instrument_type": product.type.name,
+                        "issue_currency": product.issue_currency,
+                        "minimum_purchase_value": product.minimum_purchase_value,
+                        "smallest_trading_unit": product.smallest_trading_unit,
+                        "start_date": getattr(product, "start_date", None).isoformat() if getattr(product, "start_date", None) else None,
+                        "maturity_date": getattr(product, "maturity_date", None).isoformat() if getattr(product, "maturity_date", None) else None,
+                        "interest_rate": getattr(product, "interest_rate", None),
+                        "interest_payment_frequency": getattr(getattr(product, "interest_payment_frequency", None), "name", None),
+                    }
+                    order_database.upsert_instrument(instrument_payload)
+
+                    if action == "add":
+                        instrument_message = f"Instrument toegevoegd ({product.instrument_id})"
+                    else:
+                        instrument_message = f"Instrument opgeslagen ({product.instrument_id})"
+                else:
+                    instrument_error = "Onbekende actie op instrumentscherm"
+            except ValueError as exc:
+                instrument_error = str(exc)
+
+        instruments = []
+        for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
+            row = {
+                "instrument_id": pid,
+                "description": prod.description,
+                "instrument_type": getattr(getattr(prod, "type", None), "name", "STOCK"),
+                "issue_currency": prod.issue_currency,
+                "minimum_purchase_value": getattr(prod, "minimum_purchase_value", 0),
+                "smallest_trading_unit": getattr(prod, "smallest_trading_unit", 0),
+                "start_date": getattr(prod, "start_date", None),
+                "maturity_date": getattr(prod, "maturity_date", None),
+                "interest_rate": getattr(prod, "interest_rate", None),
+                "interest_payment_frequency": getattr(getattr(prod, "interest_payment_frequency", None), "name", "YEAR"),
+            }
+            instruments.append(row)
+
         return render_template(
             "instruments.html",
             products=product_collection.products,
+            instruments=instruments,
+            instrument_types=["BOND", "STOCK", "OPTION", "FUND"],
+            payment_frequencies=[f.name for f in PaymentFrequency],
+            instrument_message=instrument_message,
+            instrument_error=instrument_error,
             selected_client=selected_client,
             selected_portfolio=selected_portfolio,
             selected_client_id=selected_client.client_id if selected_client else None,

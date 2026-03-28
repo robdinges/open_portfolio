@@ -1,5 +1,7 @@
 [
+  "tests/test_database.py::test_database_allows_cross_thread_usage_for_order_drafts",
   "tests/test_database.py::test_database_client_portfolio",
+  "tests/test_database.py::test_database_instrument_persistence_roundtrip",
   "tests/test_database.py::test_database_order_draft_persistence",
   "tests/test_database.py::test_database_order_draft_status_counts_and_list",
   "tests/test_database.py::test_database_purge_stale_order_drafts_keeps_submitted",
@@ -19,6 +21,8 @@
   "tests/test_web_app.py::test_bond_limit_price_percent_is_converted_to_decimal_for_execution",
   "tests/test_web_app.py::test_form_contains_dependent_field_reset_javascript",
   "tests/test_web_app.py::test_index_page_contains_portfolio",
+  "tests/test_web_app.py::test_instrument_add_persists_across_app_instances",
+  "tests/test_web_app.py::test_instruments_page_can_add_option_and_save_stock",
   "tests/test_web_app.py::test_limit_bond_form_shows_percent_suffix_and_nominal_label",
   "tests/test_web_app.py::test_market_sell_accepts_decimal_comma_and_redirects",
   "tests/test_web_app.py::test_order_confirm_action_shows_validation_message_without_redirect",
