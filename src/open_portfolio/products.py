@@ -15,6 +15,7 @@ class Product:
         minimum_purchase_value: float,
         smallest_trading_unit: float,
         issue_currency: str,
+        isin: str = ""
     ):
         self.instrument_id = instrument_id
         self.description = description
@@ -22,6 +23,7 @@ class Product:
         self.minimum_purchase_value = minimum_purchase_value
         self.smallest_trading_unit = smallest_trading_unit
         self.issue_currency = issue_currency
+        self.isin = isin
         self.prices: List[Tuple[date, float]] = []
         self.transactions: List = []  # filled by TransactionManager
 
@@ -52,6 +54,7 @@ class Product:
             "description": self.description,
             "type": self.type.name,
             "currency": self.issue_currency,
+            "isin": self.isin,
         }
 
 
@@ -67,6 +70,7 @@ class Bond(Product):
         maturity_date: date,
         interest_rate: float,
         interest_payment_frequency: PaymentFrequency,
+        isin: str = ""
     ):
         super().__init__(
             instrument_id,
@@ -75,6 +79,7 @@ class Bond(Product):
             minimum_purchase_value,
             smallest_trading_unit,
             issue_currency,
+            isin=isin
         )
         self.start_date = start_date
         self.maturity_date = maturity_date
@@ -122,6 +127,7 @@ class Stock(Product):
         minimum_purchase_value: float,
         smallest_trading_unit: float,
         issue_currency: str,
+        isin: str = ""
     ):
         super().__init__(
             product_id,
@@ -130,4 +136,5 @@ class Stock(Product):
             minimum_purchase_value,
             smallest_trading_unit,
             issue_currency,
+            isin=isin
         )

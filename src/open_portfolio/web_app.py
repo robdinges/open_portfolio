@@ -978,10 +978,19 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
     return app
 
 
+
 def run(host="127.0.0.1", port=5000):
+    import os
     if Flask is None:
         print("Flask is not installed. Install with: pip install flask", file=sys.stderr)
         return
+    # Poort uit env of argument
+    port_env = os.environ.get("OPEN_PORTFOLIO_PORT")
+    if port_env:
+        try:
+            port = int(port_env)
+        except Exception:
+            print(f"Ongeldige OPEN_PORTFOLIO_PORT: {port_env}")
     client, products_list, currency_prices = create_demo_data()
     # Rebuild ProductCollection from products list
     product_collection = ProductCollection()
@@ -992,5 +1001,9 @@ def run(host="127.0.0.1", port=5000):
 
 
 if __name__ == "__main__":
-    # allow module invocation
-    run()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=None, help="Poort voor de webserver")
+    args = parser.parse_args()
+    port = args.port or int(os.environ.get("OPEN_PORTFOLIO_PORT", 5000))
+    run(port=port)
