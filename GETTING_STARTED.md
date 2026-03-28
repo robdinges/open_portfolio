@@ -275,6 +275,110 @@ Make sure to use the virtualenv Python:
 
 ---
 
+## Automatic Deploy (SSH Host, No Docker)
+
+This project now includes a full CI/CD baseline for SSH-based hosting.
+
+### 1. Required GitHub Secrets
+
+Set these repository secrets before enabling deploy:
+
+- `SSH_HOST`
+- `SSH_PORT`
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
+- `APP_DIR` (example: `/srv/open-portfolio`)
+
+### 2. Server Bootstrap
+
+Run once on your server:
+
+```bash
+cd /path/to/open_portfolio
+chmod +x scripts/bootstrap_server.sh scripts/deploy.sh
+./scripts/bootstrap_server.sh /srv/open-portfolio
+```
+
+Then copy and edit templates:
+
+- `deploy/systemd/openportfolio.service` -> `/etc/systemd/system/openportfolio.service`
+- `deploy/nginx/openportfolio.conf` -> `/etc/nginx/sites-available/openportfolio.conf`
+
+Or generate host-specific files automatically:
+
+```bash
+./scripts/configure_deploy_files.sh <app_user> <app_dir> <server_name> <output_dir>
+```
+
+Example:
+
+```bash
+./scripts/configure_deploy_files.sh deploy /srv/open-portfolio portfolio.example.com /tmp/openportfolio-deploy
+```
+
+Generated files:
+
+- `/tmp/openportfolio-deploy/systemd/openportfolio.service`
+- `/tmp/openportfolio-deploy/nginx/openportfolio.conf`
+
+Replace placeholders in `openportfolio.service`:
+
+- `__APP_USER__`
+- `__APP_DIR__`
+
+Enable services:
+
+```bash
+sudo ln -sf /etc/nginx/sites-available/openportfolio.conf /etc/nginx/sites-enabled/openportfolio.conf
+sudo nginx -t
+sudo systemctl daemon-reload
+sudo systemctl enable openportfolio
+sudo systemctl restart openportfolio
+sudo systemctl restart nginx
+```
+
+### 3. CI/CD Workflow
+
+The workflow is defined in `.github/workflows/deploy.yml` and runs:
+
+1. Test stage (`pytest`)
+2. Deploy stage (rsync + remote `scripts/deploy.sh`) on pushes to `main`
+
+### 3b. Shared Hosting CI/CD (No systemd/nginx)
+
+For shared hosting environments (for example `htdocs` deployments), use:
+
+- `.github/workflows/deploy-shared-hosting.yml`
+- `scripts/deploy_shared_host.sh`
+
+Required secrets:
+
+- `SSH_HOST`
+- `SSH_PORT` (must be your real SSH port; often `22`, not FTP port `21`)
+- `SSH_USER`
+- `SSH_PRIVATE_KEY`
+- `APP_DIR` (example: `/home/<user>/htdocs/<domain>`)
+- `RESTART_TOUCH_FILE` (example: `/home/<user>/htdocs/<domain>/tmp/restart.txt`)
+
+This shared-hosting deploy path does:
+
+1. Run tests in GitHub Actions
+2. Upload code via `rsync`
+3. Create/update `.venv` and install requirements remotely
+4. Touch `restart.txt` for Passenger-style app restarts
+
+### 4. Health Check
+
+Use:
+
+```bash
+curl -fsS http://127.0.0.1:5000/healthz
+```
+
+The endpoint returns HTTP 200 when the app is healthy.
+
+---
+
 ## Feature Highlights
 
 - ✅ **Modular Architecture**: Separate modules for accounts, transactions, products, pricing, database, GUI and reporting

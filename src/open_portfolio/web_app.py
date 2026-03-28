@@ -217,7 +217,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             raise ValueError("Omschrijving is verplicht")
 
         instrument_type_text = (form_data.get("instrument_type", "") or "").strip().upper()
-        if instrument_type_text not in {"BOND", "STOCK"}:
+        if instrument_type_text not in {"BOND", "STOCK", "OPTION", "FUND"}:
             raise ValueError("Instrumenttype is ongeldig")
 
         currency = (form_data.get("issue_currency", "") or "").strip().upper()
@@ -251,9 +251,20 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 isin=isin,
             )
 
-        return Stock(
-            product_id=instrument_id,
+        if instrument_type_text == "STOCK":
+            return Stock(
+                product_id=instrument_id,
+                description=description,
+                minimum_purchase_value=min_purchase,
+                smallest_trading_unit=trading_unit,
+                issue_currency=currency,
+                isin=isin,
+            )
+
+        return Product(
+            instrument_id=instrument_id,
             description=description,
+            product_type=InstrumentType[instrument_type_text],
             minimum_purchase_value=min_purchase,
             smallest_trading_unit=trading_unit,
             issue_currency=currency,
@@ -308,6 +319,10 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             format_currency=format_currency,
             active_page="home",
         )
+
+    @app.route("/healthz")
+    def healthz():
+        return {"status": "ok"}, 200
 
     @app.route("/transactions")
     def transactions():
@@ -875,14 +890,40 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             active_page="accounts",
         )
 
-    @app.route("/instruments", methods=["GET"])
+    @app.route("/instruments", methods=["GET", "POST"])
     def instruments_page():
-        selected_client_id = request.args.get("client_id", type=int)
-        selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        if request.method == "POST":
+            selected_client_id = request.form.get("client_id", type=int)
+            selected_portfolio_id = request.form.get("portfolio_id", type=int)
+        else:
+            selected_client_id = request.args.get("client_id", type=int)
+            selected_portfolio_id = request.args.get("portfolio_id", type=int)
 
         selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
         instrument_message = request.args.get("message")
         instrument_error = request.args.get("error")
+
+        if request.method == "POST":
+            action = (request.form.get("action") or "").strip().lower()
+            try:
+                if action in {"add", "save"}:
+                    fixed_id = None
+                    if action == "save":
+                        fixed_id = parse_int(request.form.get("instrument_id", ""), "Instrument ID")
+                    product = build_product_from_form(request.form, fixed_instrument_id=fixed_id)
+                    existing = product_collection.search_product_id(product.instrument_id)
+                    if action == "add" and existing is not None:
+                        raise ValueError("Instrument ID bestaat al")
+                    product_collection.add_product(product)
+                    order_database.upsert_instrument(instrument_to_payload(product))
+                    if action == "add":
+                        instrument_message = f"Instrument toegevoegd ({product.instrument_id})"
+                    else:
+                        instrument_message = f"Instrument opgeslagen ({product.instrument_id})"
+                else:
+                    instrument_error = "Onbekende actie op instrumentscherm"
+            except ValueError as exc:
+                instrument_error = str(exc)
 
         instruments = []
         for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
@@ -1152,5 +1193,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=None, help="Poort voor de webserver")
     args = parser.parse_args()
-    port = args.port or int(os.environ.get("OPEN_PORTFOLIO_PORT", 5000))
-    run(port=port)
+    main_port = args.port or int(os.environ.get("OPEN_PORTFOLIO_PORT", 5000))
+    run(port=main_port)

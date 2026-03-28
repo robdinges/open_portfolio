@@ -1,0 +1,20 @@
+[Unit]
+Description=OpenPortfolio Gunicorn Service
+After=network.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__
+Environment=PYTHONPATH=src
+Environment=OPEN_PORTFOLIO_PORT=5000
+Environment=OPEN_PORTFOLIO_ORDER_DB_PATH=__APP_DIR__/shared/open_portfolio_orders.sqlite3
+Environment=OPEN_PORTFOLIO_ORDER_DRAFT_RETENTION_DAYS=30
+ExecStart=__APP_DIR__/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:5000 open_portfolio.wsgi:app
+Restart=always
+RestartSec=3
+StandardOutput=append:__APP_DIR__/shared/logs/gunicorn.log
+StandardError=append:__APP_DIR__/shared/logs/gunicorn-error.log
+
+[Install]
+WantedBy=multi-user.target

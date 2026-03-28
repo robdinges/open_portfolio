@@ -218,3 +218,4 @@ XlsxWriter==3.1.0
 yarl==1.9.2
 yfinance==0.2.31
 zstandard==0.21.0
+gunicorn==23.0.0
