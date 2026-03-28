@@ -3,10 +3,10 @@
 {% block content %}
 <h2>Instrumenten</h2>
 
-{% if instrument_message %}<div class="success">{{ instrument_message }}</div>{% endif %}
+{% if instrument_message %}<div class="success" style="padding:0.7em 1em; border:1px solid #27ae60; background:#eefaf2; border-radius:6px; margin-bottom:1em;">{{ instrument_message }}</div>{% endif %}
 {% if instrument_error %}<div class="error">{{ instrument_error }}</div>{% endif %}
 
-<div class="form-actions" style="margin-bottom:2em;">
+<div class="top-actions">
   <a class="button" href="/instruments/new">Nieuw instrument toevoegen</a>
 </div>
 

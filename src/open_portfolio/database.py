@@ -74,6 +74,7 @@ class Database:
                 """
                 CREATE TABLE IF NOT EXISTS instrument (
                     instrument_id INTEGER PRIMARY KEY,
+                    isin TEXT,
                     description TEXT NOT NULL,
                     instrument_type TEXT NOT NULL,
                     issue_currency TEXT NOT NULL,
@@ -87,6 +88,10 @@ class Database:
                 )
                 """
             )
+            try:
+                c.execute("ALTER TABLE instrument ADD COLUMN isin TEXT")
+            except sqlite3.OperationalError:
+                pass
             self.conn.commit()
 
     # simple insert/replace helpers
@@ -287,6 +292,7 @@ class Database:
                 """
                 INSERT OR REPLACE INTO instrument(
                     instrument_id,
+                    isin,
                     description,
                     instrument_type,
                     issue_currency,
@@ -297,10 +303,11 @@ class Database:
                     interest_rate,
                     interest_payment_frequency,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(instrument["instrument_id"]),
+                    (instrument.get("isin") or ""),
                     str(instrument["description"]),
                     str(instrument["instrument_type"]).upper(),
                     str(instrument["issue_currency"]).upper(),
@@ -322,6 +329,7 @@ class Database:
                 """
                 SELECT
                     instrument_id,
+                    isin,
                     description,
                     instrument_type,
                     issue_currency,
@@ -340,16 +348,17 @@ class Database:
             return [
                 {
                     "instrument_id": int(r[0]),
-                    "description": r[1],
-                    "instrument_type": r[2],
-                    "issue_currency": r[3],
-                    "minimum_purchase_value": float(r[4]),
-                    "smallest_trading_unit": float(r[5]),
-                    "start_date": r[6],
-                    "maturity_date": r[7],
-                    "interest_rate": float(r[8]) if r[8] is not None else None,
-                    "interest_payment_frequency": r[9],
-                    "updated_at": r[10],
+                    "isin": r[1] or "",
+                    "description": r[2],
+                    "instrument_type": r[3],
+                    "issue_currency": r[4],
+                    "minimum_purchase_value": float(r[5]),
+                    "smallest_trading_unit": float(r[6]),
+                    "start_date": r[7],
+                    "maturity_date": r[8],
+                    "interest_rate": float(r[9]) if r[9] is not None else None,
+                    "interest_payment_frequency": r[10],
+                    "updated_at": r[11],
                 }
                 for r in rows
             ]

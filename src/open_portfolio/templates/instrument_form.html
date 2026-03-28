@@ -4,7 +4,37 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const typeSelect = document.getElementById("instrument_type");
+  const form = document.getElementById("instrument-form");
+  const cancelButtons = document.querySelectorAll(".cancel-button");
+  let dirty = false;
+
+  if (form) {
+    form.addEventListener("change", function () {
+      dirty = true;
+    });
+    form.addEventListener("submit", function () {
+      dirty = false;
+    });
+  }
+
+  cancelButtons.forEach(function (cancelButton) {
+    cancelButton.addEventListener("click", function (event) {
+      if (!dirty) return;
+      const leave = window.confirm("Je hebt onopgeslagen wijzigingen. Weet je zeker dat je wilt annuleren?");
+      if (!leave) {
+        event.preventDefault();
+      }
+    });
+  });
+
+  window.addEventListener("beforeunload", function (event) {
+    if (!dirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
   function updateFields() {
+    if (!typeSelect) return;
     const type = typeSelect.value;
     document.querySelectorAll(".bond-only").forEach(e => e.style.display = (type === "BOND") ? "flex" : "none");
     document.querySelectorAll(".stock-only").forEach(e => e.style.display = (type === "STOCK") ? "flex" : "none");
@@ -18,7 +48,28 @@ document.addEventListener("DOMContentLoaded", function () {
 {% endblock %}
 {% block content %}
 <h2>{{ form_title }}</h2>
-<form method="post">
+
+{% if instrument_error %}<div class="error">{{ instrument_error }}</div>{% endif %}
+
+{% if choose_type_mode %}
+<form method="get" id="type-select-form">
+  <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
+  <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
+  <div class="form-row">
+    <label for="instrument_type">Type</label>
+    <select id="instrument_type" name="instrument_type" required>
+      <option value="">Kies type</option>
+      <option value="STOCK">Aandeel</option>
+      <option value="BOND">Obligatie</option>
+    </select>
+  </div>
+  <div class="form-actions">
+    <button class="button" type="submit">Volgende</button>
+    <a class="button cancel cancel-button" href="/instruments">Annuleren</a>
+  </div>
+</form>
+{% else %}
+<form method="post" id="instrument-form">
   <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
   <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
   <input type="hidden" name="action" value="{{ action }}">
@@ -40,6 +91,7 @@ document.addEventListener("DOMContentLoaded", function () {
     <select id="instrument_type" name="instrument_type" required {% if action != 'add' %}disabled{% endif %}>
       {% for t in instrument_types %}<option value="{{ t }}" {% if t == instrument.instrument_type %}selected{% endif %}>{{ t }}</option>{% endfor %}
     </select>
+    {% if action != 'add' %}<input type="hidden" name="instrument_type" value="{{ instrument.instrument_type }}">{% endif %}
   </div>
   <div class="form-row">
     <label for="issue_currency">Valuta</label>
@@ -59,16 +111,12 @@ document.addEventListener("DOMContentLoaded", function () {
     <input id="issuer" name="issuer" value="{{ instrument.issuer or '' }}">
   </div>
   <div class="form-row bond-only">
-    <label for="start_date">Startdatum</label>
-    <input id="start_date" type="date" name="start_date" value="{{ instrument.start_date|default('', true) }}">
-  </div>
-  <div class="form-row bond-only">
     <label for="maturity_date">Einddatum</label>
     <input id="maturity_date" type="date" name="maturity_date" value="{{ instrument.maturity_date|default('', true) }}">
   </div>
   <div class="form-row bond-only">
     <label for="interest_rate">Couponrente (%)</label>
-    <input id="interest_rate" name="interest_rate" value="{{ instrument.interest_rate or '' }}">
+    <input id="interest_rate" name="interest_rate" value="{{ instrument.interest_rate or '' }}" placeholder="Bijv. 4 voor 4%">
   </div>
   <div class="form-row bond-only">
     <label for="interest_payment_frequency">Couponfrequentie</label>
@@ -85,8 +133,9 @@ document.addEventListener("DOMContentLoaded", function () {
   </div>
 
   <div class="form-actions">
-    <button class="button" type="submit">{{ action == 'add' and 'Toevoegen' or 'Opslaan' }}</button>
-    <a class="button cancel" href="/instruments">Annuleren</a>
+    <button class="button" type="submit">Save</button>
+    <a class="button cancel cancel-button" href="/instruments">Cancel</a>
   </div>
 </form>
+{% endif %}
 {% endblock %}

@@ -11,6 +11,9 @@ form to submit a BUY/SELL transaction.
 from __future__ import annotations
 import os
 import sys
+import signal
+import subprocess
+import time
 from datetime import date
 
 try:
@@ -56,6 +59,7 @@ def format_currency(amount, currency="EUR", symbol="€"):
     return f"{display_symbol} {s}"
 
 def make_app(client=None, product_collection=None, currency_prices=None, order_database=None):
+
     if Flask is None:
         raise RuntimeError("Flask is not installed. Please `pip install flask` to run the web UI.")
 
@@ -92,6 +96,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             instrument_type = (row.get("instrument_type") or "").upper()
             instrument_id = int(row["instrument_id"])
             description = row["description"]
+            isin = row.get("isin") or ""
             issue_currency = (row.get("issue_currency") or "EUR").upper()
             minimum_purchase_value = float(row.get("minimum_purchase_value") or 1.0)
             smallest_trading_unit = float(row.get("smallest_trading_unit") or 1.0)
@@ -115,6 +120,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                     maturity_date=date.fromisoformat(maturity_date_raw),
                     interest_rate=float(row.get("interest_rate") or 0.0),
                     interest_payment_frequency=frequency,
+                    isin=isin,
                 )
             elif instrument_type == "STOCK":
                 product = Stock(
@@ -123,6 +129,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                     minimum_purchase_value=minimum_purchase_value,
                     smallest_trading_unit=smallest_trading_unit,
                     issue_currency=issue_currency,
+                    isin=isin,
                 )
             elif instrument_type in {"OPTION", "FUND"}:
                 product = Product(
@@ -132,6 +139,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                     minimum_purchase_value=minimum_purchase_value,
                     smallest_trading_unit=smallest_trading_unit,
                     issue_currency=issue_currency,
+                    isin=isin,
                 )
             else:
                 continue
@@ -161,6 +169,111 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         if selected_portfolio:
             parts.append(f"portfolio_id={selected_portfolio.portfolio_id}")
         return f"?{'&'.join(parts)}" if parts else ""
+
+    def parse_float(value: str, field_name: str) -> float:
+        text = (value or "").strip().replace(" ", "").replace(",", ".")
+        if not text:
+            raise ValueError(f"{field_name} is verplicht")
+        try:
+            return float(text)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} heeft geen geldig getal") from exc
+
+    def parse_int(value: str, field_name: str) -> int:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError(f"{field_name} is verplicht")
+        try:
+            return int(text)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} heeft geen geldig geheel getal") from exc
+
+    def parse_date_required(value: str, field_name: str) -> date:
+        text = (value or "").strip()
+        if not text:
+            raise ValueError(f"{field_name} is verplicht")
+        try:
+            return date.fromisoformat(text)
+        except ValueError as exc:
+            raise ValueError(f"{field_name} heeft ongeldig formaat (YYYY-MM-DD)") from exc
+
+    def format_coupon_percent(interest_rate_decimal) -> str:
+        if interest_rate_decimal is None:
+            return ""
+        try:
+            value = round(float(interest_rate_decimal) * 100.0, 6)
+        except (TypeError, ValueError):
+            return ""
+        return f"{value:.6f}".rstrip("0").rstrip(".")
+
+    def build_product_from_form(form_data, fixed_instrument_id=None):
+        if fixed_instrument_id is None:
+            instrument_id = parse_int(form_data.get("instrument_id", ""), "Instrument ID")
+        else:
+            instrument_id = fixed_instrument_id
+
+        description = (form_data.get("description", "") or "").strip()
+        if not description:
+            raise ValueError("Omschrijving is verplicht")
+
+        instrument_type_text = (form_data.get("instrument_type", "") or "").strip().upper()
+        if instrument_type_text not in {"BOND", "STOCK"}:
+            raise ValueError("Instrumenttype is ongeldig")
+
+        currency = (form_data.get("issue_currency", "") or "").strip().upper()
+        if not currency:
+            raise ValueError("Valuta is verplicht")
+
+        isin = (form_data.get("isin", "") or "").strip().upper()
+        min_purchase = parse_float(form_data.get("minimum_purchase_value", ""), "Minimale ordergrootte")
+        trading_unit = parse_float(form_data.get("smallest_trading_unit", ""), "Handelseenheid")
+
+        if instrument_type_text == "BOND":
+            maturity_date_value = parse_date_required(form_data.get("maturity_date", ""), "Einddatum")
+            coupon_percent = parse_float(form_data.get("interest_rate", ""), "Couponrente")
+            interest_rate = coupon_percent / 100.0
+            frequency_text = (form_data.get("interest_payment_frequency", "YEAR") or "YEAR").strip().upper()
+            try:
+                frequency = PaymentFrequency[frequency_text]
+            except KeyError as exc:
+                raise ValueError("Couponfrequentie is ongeldig") from exc
+
+            return Bond(
+                instrument_id=instrument_id,
+                description=description,
+                minimum_purchase_value=min_purchase,
+                smallest_trading_unit=trading_unit,
+                issue_currency=currency,
+                start_date=date.today(),
+                maturity_date=maturity_date_value,
+                interest_rate=interest_rate,
+                interest_payment_frequency=frequency,
+                isin=isin,
+            )
+
+        return Stock(
+            product_id=instrument_id,
+            description=description,
+            minimum_purchase_value=min_purchase,
+            smallest_trading_unit=trading_unit,
+            issue_currency=currency,
+            isin=isin,
+        )
+
+    def instrument_to_payload(product):
+        return {
+            "instrument_id": product.instrument_id,
+            "description": product.description,
+            "instrument_type": product.type.name,
+            "issue_currency": product.issue_currency,
+            "minimum_purchase_value": product.minimum_purchase_value,
+            "smallest_trading_unit": product.smallest_trading_unit,
+            "start_date": getattr(product, "start_date", None).isoformat() if getattr(product, "start_date", None) else None,
+            "maturity_date": getattr(product, "maturity_date", None).isoformat() if getattr(product, "maturity_date", None) else None,
+            "interest_rate": getattr(product, "interest_rate", None),
+            "interest_payment_frequency": getattr(getattr(product, "interest_payment_frequency", None), "name", None),
+            "isin": getattr(product, "isin", ""),
+        }
 
     @app.route("/holdings")
     def holdings_page():
@@ -762,141 +875,21 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             active_page="accounts",
         )
 
-    @app.route("/instruments", methods=["GET", "POST"])
+    @app.route("/instruments", methods=["GET"])
     def instruments_page():
-        if request.method == "POST":
-            selected_client_id = request.form.get("client_id", type=int)
-            selected_portfolio_id = request.form.get("portfolio_id", type=int)
-        else:
-            selected_client_id = request.args.get("client_id", type=int)
-            selected_portfolio_id = request.args.get("portfolio_id", type=int)
+        selected_client_id = request.args.get("client_id", type=int)
+        selected_portfolio_id = request.args.get("portfolio_id", type=int)
 
         selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
-        instrument_message = None
-        instrument_error = None
-
-        def parse_float(value: str, field_name: str) -> float:
-            text = (value or "").strip().replace(" ", "").replace(",", ".")
-            if not text:
-                raise ValueError(f"{field_name} is verplicht")
-            try:
-                return float(text)
-            except ValueError as exc:
-                raise ValueError(f"{field_name} heeft geen geldig getal") from exc
-
-        def parse_int(value: str, field_name: str) -> int:
-            text = (value or "").strip()
-            if not text:
-                raise ValueError(f"{field_name} is verplicht")
-            try:
-                return int(text)
-            except ValueError as exc:
-                raise ValueError(f"{field_name} heeft geen geldig geheel getal") from exc
-
-        def parse_date_required(value: str, field_name: str) -> date:
-            text = (value or "").strip()
-            if not text:
-                raise ValueError(f"{field_name} is verplicht")
-            try:
-                return date.fromisoformat(text)
-            except ValueError as exc:
-                raise ValueError(f"{field_name} heeft ongeldig formaat (YYYY-MM-DD)") from exc
-
-        def build_product_from_form(form_data, existing_product=None):
-            instrument_id = parse_int(form_data.get("instrument_id", ""), "Instrument ID")
-            description = (form_data.get("description", "") or "").strip()
-            if not description:
-                raise ValueError("Omschrijving is verplicht")
-
-            instrument_type_text = (form_data.get("instrument_type", "") or "").strip().upper()
-            if instrument_type_text not in {"BOND", "STOCK", "OPTION", "FUND"}:
-                raise ValueError("Instrumenttype is ongeldig")
-
-            currency = (form_data.get("issue_currency", "") or "").strip().upper()
-            if not currency:
-                raise ValueError("Valuta is verplicht")
-
-            min_purchase = parse_float(form_data.get("minimum_purchase_value", ""), "Minimale ordergrootte")
-            trading_unit = parse_float(form_data.get("smallest_trading_unit", ""), "Handelseenheid")
-
-            if instrument_type_text == "BOND":
-                start_date_value = parse_date_required(form_data.get("start_date", ""), "Startdatum")
-                maturity_date_value = parse_date_required(form_data.get("maturity_date", ""), "Einddatum")
-                interest_rate = parse_float(form_data.get("interest_rate", ""), "Couponrente")
-                frequency_text = (form_data.get("interest_payment_frequency", "YEAR") or "YEAR").strip().upper()
-                try:
-                    frequency = PaymentFrequency[frequency_text]
-                except KeyError as exc:
-                    raise ValueError("Couponfrequentie is ongeldig") from exc
-
-                return Bond(
-                    instrument_id=instrument_id,
-                    description=description,
-                    minimum_purchase_value=min_purchase,
-                    smallest_trading_unit=trading_unit,
-                    issue_currency=currency,
-                    start_date=start_date_value,
-                    maturity_date=maturity_date_value,
-                    interest_rate=interest_rate,
-                    interest_payment_frequency=frequency,
-                )
-
-            if instrument_type_text == "STOCK":
-                return Stock(
-                    product_id=instrument_id,
-                    description=description,
-                    minimum_purchase_value=min_purchase,
-                    smallest_trading_unit=trading_unit,
-                    issue_currency=currency,
-                )
-
-            option_or_fund_type = InstrumentType[instrument_type_text]
-            return Product(
-                instrument_id=instrument_id,
-                description=description,
-                product_type=option_or_fund_type,
-                minimum_purchase_value=min_purchase,
-                smallest_trading_unit=trading_unit,
-                issue_currency=currency,
-            )
-
-        if request.method == "POST":
-            action = (request.form.get("action") or "").strip().lower()
-            try:
-                if action in {"add", "save"}:
-                    product = build_product_from_form(request.form)
-                    existing = product_collection.search_product_id(product.instrument_id)
-                    if action == "add" and existing is not None:
-                        raise ValueError("Instrument ID bestaat al")
-                    product_collection.add_product(product)
-
-                    instrument_payload = {
-                        "instrument_id": product.instrument_id,
-                        "description": product.description,
-                        "instrument_type": product.type.name,
-                        "issue_currency": product.issue_currency,
-                        "minimum_purchase_value": product.minimum_purchase_value,
-                        "smallest_trading_unit": product.smallest_trading_unit,
-                        "start_date": getattr(product, "start_date", None).isoformat() if getattr(product, "start_date", None) else None,
-                        "maturity_date": getattr(product, "maturity_date", None).isoformat() if getattr(product, "maturity_date", None) else None,
-                        "interest_rate": getattr(product, "interest_rate", None),
-                        "interest_payment_frequency": getattr(getattr(product, "interest_payment_frequency", None), "name", None),
-                    }
-                    order_database.upsert_instrument(instrument_payload)
-
-                    if action == "add":
-                        instrument_message = f"Instrument toegevoegd ({product.instrument_id})"
-                    else:
-                        instrument_message = f"Instrument opgeslagen ({product.instrument_id})"
-                else:
-                    instrument_error = "Onbekende actie op instrumentscherm"
-            except ValueError as exc:
-                instrument_error = str(exc)
+        instrument_message = request.args.get("message")
+        instrument_error = request.args.get("error")
 
         instruments = []
         for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
             row = {
                 "instrument_id": pid,
+                "isin": getattr(prod, "isin", ""),
+                "name": prod.description,
                 "description": prod.description,
                 "instrument_type": getattr(getattr(prod, "type", None), "name", "STOCK"),
                 "issue_currency": prod.issue_currency,
@@ -913,10 +906,147 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             "instruments.html",
             products=product_collection.products,
             instruments=instruments,
-            instrument_types=["BOND", "STOCK", "OPTION", "FUND"],
+            instrument_types=["BOND", "STOCK"],
             payment_frequencies=[f.name for f in PaymentFrequency],
             instrument_message=instrument_message,
             instrument_error=instrument_error,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            active_page="instruments",
+        )
+
+    @app.route("/instruments/new", methods=["GET", "POST"])
+    def new_instrument():
+        selected_client_id = request.values.get("client_id", type=int)
+        selected_portfolio_id = request.values.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+
+        if request.method == "POST":
+            try:
+                product = build_product_from_form(request.form)
+                if product_collection.search_product_id(product.instrument_id) is not None:
+                    raise ValueError("Instrument ID bestaat al")
+                product_collection.add_product(product)
+                order_database.upsert_instrument(instrument_to_payload(product))
+                return redirect(url_for("instruments_page", message=f"Instrument opgeslagen: {product.instrument_id}"))
+            except ValueError as exc:
+                return render_template(
+                    "instrument_form.html",
+                    instrument=dict(request.form),
+                    instrument_types=["BOND", "STOCK"],
+                    payment_frequencies=[f.name for f in PaymentFrequency],
+                    action="add",
+                    form_title="Nieuw instrument",
+                    choose_type_mode=False,
+                    instrument_error=str(exc),
+                    selected_client=selected_client,
+                    selected_portfolio=selected_portfolio,
+                    selected_client_id=selected_client.client_id if selected_client else None,
+                    selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+                    nav_query=nav_query(selected_client, selected_portfolio),
+                    active_page="instruments",
+                )
+
+        instrument_type = (request.args.get("instrument_type") or "").strip().upper()
+        if instrument_type not in {"BOND", "STOCK"}:
+            return render_template(
+                "instrument_form.html",
+                instrument={"instrument_type": ""},
+                instrument_types=["BOND", "STOCK"],
+                payment_frequencies=[f.name for f in PaymentFrequency],
+                action="add",
+                form_title="Kies instrumenttype",
+                choose_type_mode=True,
+                selected_client=selected_client,
+                selected_portfolio=selected_portfolio,
+                selected_client_id=selected_client.client_id if selected_client else None,
+                selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+                nav_query=nav_query(selected_client, selected_portfolio),
+                active_page="instruments",
+            )
+
+        return render_template(
+            "instrument_form.html",
+            instrument={
+                "instrument_type": instrument_type,
+                "issue_currency": "EUR",
+                "minimum_purchase_value": "1",
+                "smallest_trading_unit": "1",
+                "interest_payment_frequency": "YEAR",
+            },
+            instrument_types=["BOND", "STOCK"],
+            payment_frequencies=[f.name for f in PaymentFrequency],
+            action="add",
+            form_title="Nieuw instrument",
+            choose_type_mode=False,
+            selected_client=selected_client,
+            selected_portfolio=selected_portfolio,
+            selected_client_id=selected_client.client_id if selected_client else None,
+            selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+            nav_query=nav_query(selected_client, selected_portfolio),
+            active_page="instruments",
+        )
+
+    @app.route("/instruments/edit/<int:instrument_id>", methods=["GET", "POST"])
+    def edit_instrument(instrument_id):
+        selected_client_id = request.values.get("client_id", type=int)
+        selected_portfolio_id = request.values.get("portfolio_id", type=int)
+        selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
+
+        existing = product_collection.search_product_id(instrument_id)
+        if existing is None:
+            return "Instrument niet gevonden", 404
+
+        if request.method == "POST":
+            try:
+                product = build_product_from_form(request.form, fixed_instrument_id=instrument_id)
+                product_collection.add_product(product)
+                order_database.upsert_instrument(instrument_to_payload(product))
+                return redirect(url_for("instruments_page", message=f"Instrument opgeslagen: {instrument_id}"))
+            except ValueError as exc:
+                form_data = dict(request.form)
+                form_data["instrument_id"] = str(instrument_id)
+                return render_template(
+                    "instrument_form.html",
+                    instrument=form_data,
+                    instrument_types=["BOND", "STOCK"],
+                    payment_frequencies=[f.name for f in PaymentFrequency],
+                    action="save",
+                    form_title=f"Wijzig instrument {instrument_id}",
+                    choose_type_mode=False,
+                    instrument_error=str(exc),
+                    selected_client=selected_client,
+                    selected_portfolio=selected_portfolio,
+                    selected_client_id=selected_client.client_id if selected_client else None,
+                    selected_portfolio_id=selected_portfolio.portfolio_id if selected_portfolio else None,
+                    nav_query=nav_query(selected_client, selected_portfolio),
+                    active_page="instruments",
+                )
+
+        instrument = {
+            "instrument_id": existing.instrument_id,
+            "isin": getattr(existing, "isin", ""),
+            "description": existing.description,
+            "instrument_type": existing.type.name,
+            "issue_currency": existing.issue_currency,
+            "minimum_purchase_value": existing.minimum_purchase_value,
+            "smallest_trading_unit": existing.smallest_trading_unit,
+            "maturity_date": getattr(existing, "maturity_date", None).isoformat() if getattr(existing, "maturity_date", None) else "",
+            "interest_rate": format_coupon_percent(getattr(existing, "interest_rate", None)),
+            "interest_payment_frequency": getattr(getattr(existing, "interest_payment_frequency", None), "name", "YEAR"),
+        }
+
+        return render_template(
+            "instrument_form.html",
+            instrument=instrument,
+            instrument_types=["BOND", "STOCK"],
+            payment_frequencies=[f.name for f in PaymentFrequency],
+            action="save",
+            form_title=f"Wijzig instrument {instrument_id}",
+            choose_type_mode=False,
             selected_client=selected_client,
             selected_portfolio=selected_portfolio,
             selected_client_id=selected_client.client_id if selected_client else None,
@@ -980,24 +1110,41 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
 
 
 def run(host="127.0.0.1", port=5000):
-    import os
     if Flask is None:
         print("Flask is not installed. Install with: pip install flask", file=sys.stderr)
         return
-    # Poort uit env of argument
-    port_env = os.environ.get("OPEN_PORTFOLIO_PORT")
-    if port_env:
+
+    # Sluit bestaande listeners op dezelfde poort voor een schone herstart.
+    def pids_on_port(target_port: int):
         try:
-            port = int(port_env)
+            out = subprocess.check_output(["lsof", "-ti", f"tcp:{int(target_port)}"], text=True).strip()
         except Exception:
-            print(f"Ongeldige OPEN_PORTFOLIO_PORT: {port_env}")
+            return []
+        return [int(pid) for pid in out.splitlines() if pid.strip()]
+
+    for pid in pids_on_port(int(port)):
+        if pid != os.getpid():
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
+
+    time.sleep(0.35)
+
+    for pid in pids_on_port(int(port)):
+        if pid != os.getpid():
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+
     client, products_list, currency_prices = create_demo_data()
     # Rebuild ProductCollection from products list
     product_collection = ProductCollection()
     for prod in products_list:
         product_collection.add_product(prod)
     app = make_app(client, product_collection, currency_prices)
-    app.run(host=host, port=port)
+    app.run(host=host, port=port, use_reloader=False)
 
 
 if __name__ == "__main__":
