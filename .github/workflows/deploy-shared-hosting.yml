@@ -57,8 +57,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "Checking SSH connectivity to ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_PORT }}"
-          ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "echo SSH_OK && id && mkdir -p '${{ secrets.APP_DIR }}' && ls -ld '${{ secrets.APP_DIR }}' && test -w '${{ secrets.APP_DIR }}'"
+          ssh_opts="-i ~/.ssh/id_rsa -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=15 -p ${{ secrets.SSH_PORT }}"
+          if ! ssh ${ssh_opts} "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+            "echo SSH_OK && id && mkdir -p '${{ secrets.APP_DIR }}' && ls -ld '${{ secrets.APP_DIR }}' && test -w '${{ secrets.APP_DIR }}'"; then
+            echo "SSH preflight failed. Running verbose diagnostics..."
+            ssh -vvv ${ssh_opts} "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" "exit 0" || true
+            exit 1
+          fi
 
       - name: Upload code via rsync
         shell: bash
