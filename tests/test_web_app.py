@@ -162,6 +162,7 @@ def test_form_contains_dependent_field_reset_javascript():
         assert "function clearDependentFields()" in html
         assert "instrumentSelect.addEventListener(\"change\"" in html
         assert "templateSelect.addEventListener(\"change\"" in html
+        assert "beforeunload" not in html
 
 
 def test_form_contains_instrument_input_ux_guards_and_shortcuts():
@@ -176,10 +177,12 @@ def test_form_contains_instrument_input_ux_guards_and_shortcuts():
         assert response.status_code == 200
 
         html = response.get_data(as_text=True)
-        assert "submitInProgress" in html
+        assert "requestRefresh()" in html
         assert 'event.key === "Enter"' in html
         assert "Kies een instrument uit de suggestielijst." in html
         assert "scheduleAutoSubmit(700)" in html
+        assert 'id="tx-refresh-submit"' in html
+        assert "formnovalidate" in html
 
 
 def test_transaction_form_shows_position_formatting_for_stock_and_bond_choices():
@@ -211,6 +214,7 @@ def test_settlement_account_populated_on_initial_form_load():
         html = response.get_data(as_text=True)
         assert "Afrekenrekening" in html
         assert "Saldo:" in html
+        assert "Handelseenheid: 1 | Minimale ordergrootte: 50" in html
 
 
 def test_transaction_form_default_has_empty_instrument_selection():
@@ -349,6 +353,24 @@ def test_market_price_label_uses_actuele_koers_with_date():
         html = response.get_data(as_text=True)
         assert "Actuele koers" in html
         assert "(2026-03-27)" in html
+
+
+def test_market_price_is_shown_without_amount_after_instrument_selection():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get(
+            "/transactions/new?client_id=1&portfolio_id=1&template=BUY&order_type=MARKET&product_id=1&settlement_currency=USD&transaction_date=2026-03-27"
+        )
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Actuele koers" in html
+        assert "(2026-03-27)" in html
+        assert "193.5777" in html
 
 
 def test_bond_limit_price_percent_is_converted_to_decimal_for_execution():

@@ -597,6 +597,8 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         amount_label = "Nominale waarde" if is_bond else "Aantal"
         amount_unit = product.smallest_trading_unit if product else None
         minimum_order_size = product.minimum_purchase_value if product else None
+        amount_unit_display = compact_number(float(amount_unit)) if amount_unit is not None else "-"
+        minimum_order_size_display = compact_number(float(minimum_order_size)) if minimum_order_size is not None else "-"
         amount_suffix = product.issue_currency if is_bond and product else ""
 
         show_price_input = selected_order_type == "LIMIT"
@@ -795,14 +797,14 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 if product and selected_settlement_currency:
                     tx_date_preview = parse_tx_date(entered_tx_date)
                     amount_preview = parse_optional_decimal(entered_amount)
-                    if amount_preview and amount_preview > 0:
-                        if selected_order_type == "MARKET":
-                            used_price, used_price_date = get_latest_price_for_date(product, tx_date_preview)
-                        else:
-                            limit_preview = parse_optional_decimal(entered_price)
-                            used_price = limit_preview if limit_preview is not None else None
-                            used_price_date = None
+                    if selected_order_type == "MARKET":
+                        used_price, used_price_date = get_latest_price_for_date(product, tx_date_preview)
+                    else:
+                        limit_preview = parse_optional_decimal(entered_price)
+                        used_price = limit_preview if limit_preview is not None else None
+                        used_price_date = None
 
+                    if amount_preview and amount_preview > 0:
                         if used_price is not None and used_price > 0:
                             execution_price = to_execution_price(product, used_price)
                             fx = get_fx(product.issue_currency, selected_settlement_currency)
@@ -872,7 +874,9 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             amount_label=amount_label,
             amount_suffix=amount_suffix,
             amount_unit=amount_unit,
+            amount_unit_display=amount_unit_display,
             minimum_order_size=minimum_order_size,
+            minimum_order_size_display=minimum_order_size_display,
             show_price_input=show_price_input,
             limit_suffix=limit_suffix,
             current_product_kind=current_product_kind,

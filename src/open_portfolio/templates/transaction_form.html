@@ -5,6 +5,7 @@
 document.addEventListener("DOMContentLoaded", function () {
   const form = document.getElementById("tx-form");
   if (!form) return;
+  const refreshSubmitter = document.getElementById("tx-refresh-submit");
 
   const instrumentSelect = document.getElementById("product_id");
   const instrumentInput = document.getElementById("instrument_input");
@@ -38,12 +39,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  let dirty = false;
   let autoSubmitTimer = null;
-  let submitInProgress = false;
 
   function requestRefresh() {
-    if (submitInProgress) {
+    if (refreshSubmitter) {
+      form.requestSubmit(refreshSubmitter);
       return;
     }
     form.requestSubmit();
@@ -117,13 +117,17 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
+  function normalizeText(value) {
+    return (value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
   function findInstrumentMatch(typed) {
     const value = (typed || "").trim();
     if (!value) {
       return null;
     }
-    const lower = value.toLowerCase();
-    const exactLabel = baseOptions.find((item) => item.value && item.label.toLowerCase() === lower);
+    const lower = normalizeText(value);
+    const exactLabel = baseOptions.find((item) => item.value && normalizeText(item.label) === lower);
     if (exactLabel) {
       return exactLabel;
     }
@@ -188,13 +192,6 @@ document.addEventListener("DOMContentLoaded", function () {
     updateInstrumentInputValidity(true);
     return true;
   }
-
-  form.addEventListener("change", function (event) {
-    if (event.target && event.target.dataset && event.target.dataset.autoSubmit === "1") {
-      return;
-    }
-    dirty = true;
-  });
 
   if (instrumentSelect) {
     instrumentSelect.addEventListener("change", function () {
@@ -276,18 +273,10 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   form.addEventListener("submit", function () {
-    dirty = false;
-    submitInProgress = true;
-  });
-
-  form.addEventListener("invalid", function () {
-    submitInProgress = false;
-  }, true);
-
-  window.addEventListener("beforeunload", function (event) {
-    if (!dirty) return;
-    event.preventDefault();
-    event.returnValue = "";
+    if (autoSubmitTimer) {
+      window.clearTimeout(autoSubmitTimer);
+      autoSubmitTimer = null;
+    }
   });
 });
 </script>
@@ -306,6 +295,7 @@ document.addEventListener("DOMContentLoaded", function () {
 {% block content %}
 <h2>Nieuwe transactie</h2>
 <form method="post" id="tx-form">
+  <button type="submit" id="tx-refresh-submit" hidden formnovalidate aria-hidden="true" tabindex="-1"></button>
   <input type="hidden" name="client_id" value="{{ selected_client_id }}">
   <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id }}">
   <input type="hidden" name="return_to" value="{{ return_to or '' }}">
@@ -385,7 +375,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   <div class="form-row">
     <label>Orderregels</label>
-    <span>Handelseenheid: {{ amount_unit if amount_unit is not none else '-' }} | Minimale ordergrootte: {{ minimum_order_size if minimum_order_size is not none else '-' }}</span>
+    <span>Handelseenheid: {{ amount_unit_display }} | Minimale ordergrootte: {{ minimum_order_size_display }}</span>
   </div>
 
   {% if show_price_input %}
