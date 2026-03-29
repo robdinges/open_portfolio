@@ -7,22 +7,75 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!form) return;
 
   const instrumentSelect = document.getElementById("product_id");
+  const instrumentInput = document.getElementById("instrument_input");
+  const instrumentSuggestions = document.getElementById("instrument_suggestions");
   const templateSelect = document.getElementById("template");
   const orderTypeSelect = document.getElementById("order_type");
+  const txDateInput = document.getElementById("transaction_date");
   const amountInput = document.getElementById("amount");
   const priceInput = document.getElementById("price");
   const settlementSelect = document.getElementById("settlement_currency");
-  const searchInput = document.getElementById("instrument_search");
 
   const baseOptions = instrumentSelect
     ? Array.from(instrumentSelect.options).map((opt) => ({
         value: opt.value,
         label: opt.textContent,
+        searchText: (opt.dataset.search || opt.textContent || "").toLowerCase(),
         selected: opt.selected,
       }))
     : [];
 
+  function renderSuggestionList(term) {
+    if (!instrumentSuggestions) return;
+    const lower = (term || "").trim().toLowerCase();
+    instrumentSuggestions.innerHTML = "";
+    for (const item of baseOptions) {
+      if (!item.value) continue;
+      if (lower && !item.searchText.includes(lower)) continue;
+      const option = document.createElement("option");
+      option.value = item.label;
+      instrumentSuggestions.appendChild(option);
+    }
+  }
+
   let dirty = false;
+  let autoSubmitTimer = null;
+  let submitInProgress = false;
+
+  function requestRefresh() {
+    if (submitInProgress) {
+      return;
+    }
+    form.requestSubmit();
+  }
+
+  function canAutoPreviewSubmit() {
+    if (!instrumentSelect || !instrumentSelect.value) {
+      return false;
+    }
+    if (!amountInput || !(amountInput.value || "").trim()) {
+      return false;
+    }
+    if (orderTypeSelect && orderTypeSelect.value === "LIMIT" && priceInput && !(priceInput.value || "").trim()) {
+      return false;
+    }
+    if (settlementSelect && !settlementSelect.disabled && !(settlementSelect.value || "").trim()) {
+      return false;
+    }
+    return true;
+  }
+
+  function scheduleAutoSubmit(delayMs) {
+    if (autoSubmitTimer) {
+      window.clearTimeout(autoSubmitTimer);
+    }
+    autoSubmitTimer = window.setTimeout(function () {
+      if (!canAutoPreviewSubmit()) {
+        return;
+      }
+      requestRefresh();
+    }, delayMs);
+  }
 
   function clearDependentFields() {
     if (amountInput) amountInput.value = "";
@@ -35,20 +88,105 @@ document.addEventListener("DOMContentLoaded", function () {
   function filterInstruments(term) {
     if (!instrumentSelect) return;
     const selectedValue = instrumentSelect.value;
-    const lower = (term || "").toLowerCase();
+    const lower = (term || "").trim().toLowerCase();
     instrumentSelect.innerHTML = "";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Selecteer instrument";
+    if (!selectedValue) {
+      placeholder.selected = true;
+    }
+    instrumentSelect.appendChild(placeholder);
+
     for (const item of baseOptions) {
-      if (lower && !item.label.toLowerCase().includes(lower)) {
+      if (!item.value) {
+        continue;
+      }
+      if (lower && !item.searchText.includes(lower)) {
         continue;
       }
       const option = document.createElement("option");
       option.value = item.value;
       option.textContent = item.label;
+      option.dataset.search = item.searchText;
       if (item.value === selectedValue || (!selectedValue && item.selected)) {
         option.selected = true;
       }
       instrumentSelect.appendChild(option);
     }
+  }
+
+  function findInstrumentMatch(typed) {
+    const value = (typed || "").trim();
+    if (!value) {
+      return null;
+    }
+    const lower = value.toLowerCase();
+    const exactLabel = baseOptions.find((item) => item.value && item.label.toLowerCase() === lower);
+    if (exactLabel) {
+      return exactLabel;
+    }
+    const exactId = baseOptions.find((item) => item.value && item.value === value);
+    if (exactId) {
+      return exactId;
+    }
+    const isinToken = `isin: ${lower}`;
+    const exactIsin = baseOptions.find((item) => item.value && item.searchText.includes(isinToken));
+    if (exactIsin && lower.length >= 6) {
+      return exactIsin;
+    }
+    const filtered = baseOptions.filter((item) => item.value && item.searchText.includes(lower));
+    if (filtered.length === 1) {
+      return filtered[0];
+    }
+    return null;
+  }
+
+  function updateInstrumentInputValidity(isValidSelection) {
+    if (!instrumentInput) {
+      return;
+    }
+    const typed = (instrumentInput.value || "").trim();
+    if (!typed) {
+      instrumentInput.setCustomValidity("");
+      return;
+    }
+    if (isValidSelection) {
+      instrumentInput.setCustomValidity("");
+      return;
+    }
+    instrumentInput.setCustomValidity("Kies een instrument uit de suggestielijst.");
+  }
+
+  function syncInputWithSelection() {
+    if (!instrumentInput || !instrumentSelect) return;
+    const selectedOption = instrumentSelect.options[instrumentSelect.selectedIndex];
+    if (!selectedOption || !selectedOption.value) {
+      instrumentInput.value = "";
+      return;
+    }
+    instrumentInput.value = selectedOption.textContent || "";
+  }
+
+  function syncSelectionWithInput() {
+    if (!instrumentInput || !instrumentSelect) return false;
+    const typed = (instrumentInput.value || "").trim();
+    if (!typed) {
+      instrumentSelect.value = "";
+      updateInstrumentInputValidity(false);
+      return false;
+    }
+    const exactMatch = findInstrumentMatch(typed);
+    if (!exactMatch) {
+      instrumentSelect.value = "";
+      updateInstrumentInputValidity(false);
+      return false;
+    }
+    instrumentInput.value = exactMatch.label;
+    instrumentSelect.value = exactMatch.value;
+    updateInstrumentInputValidity(true);
+    return true;
   }
 
   form.addEventListener("change", function (event) {
@@ -60,40 +198,91 @@ document.addEventListener("DOMContentLoaded", function () {
 
   if (instrumentSelect) {
     instrumentSelect.addEventListener("change", function () {
+      syncInputWithSelection();
       clearDependentFields();
-      form.requestSubmit();
+      requestRefresh();
+    });
+  }
+
+  if (instrumentInput) {
+    renderSuggestionList(instrumentInput.value || "");
+    instrumentInput.addEventListener("input", function () {
+      filterInstruments(instrumentInput.value);
+      renderSuggestionList(instrumentInput.value);
+      if (syncSelectionWithInput()) {
+        clearDependentFields();
+        requestRefresh();
+      }
+    });
+    instrumentInput.addEventListener("change", function () {
+      if (syncSelectionWithInput()) {
+        clearDependentFields();
+        requestRefresh();
+      }
+    });
+    instrumentInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && syncSelectionWithInput()) {
+        event.preventDefault();
+        clearDependentFields();
+        requestRefresh();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        instrumentInput.value = "";
+        instrumentSelect.value = "";
+        updateInstrumentInputValidity(false);
+        filterInstruments("");
+        renderSuggestionList("");
+      }
     });
   }
 
   if (templateSelect) {
     templateSelect.addEventListener("change", function () {
       clearDependentFields();
-      form.requestSubmit();
+      requestRefresh();
     });
   }
 
   if (orderTypeSelect) {
     orderTypeSelect.addEventListener("change", function () {
       if (priceInput) priceInput.value = "";
-      form.requestSubmit();
+      requestRefresh();
     });
   }
 
   if (settlementSelect && !settlementSelect.disabled) {
     settlementSelect.addEventListener("change", function () {
-      form.requestSubmit();
+      requestRefresh();
     });
   }
 
-  if (searchInput) {
-    searchInput.addEventListener("input", function () {
-      filterInstruments(searchInput.value);
+  if (txDateInput) {
+    txDateInput.addEventListener("change", function () {
+      requestRefresh();
+    });
+  }
+
+  if (amountInput) {
+    amountInput.addEventListener("input", function () {
+      scheduleAutoSubmit(700);
+    });
+  }
+
+  if (priceInput && priceInput.type !== "hidden") {
+    priceInput.addEventListener("input", function () {
+      scheduleAutoSubmit(700);
     });
   }
 
   form.addEventListener("submit", function () {
     dirty = false;
+    submitInProgress = true;
   });
+
+  form.addEventListener("invalid", function () {
+    submitInProgress = false;
+  }, true);
 
   window.addEventListener("beforeunload", function (event) {
     if (!dirty) return;
@@ -107,6 +296,7 @@ document.addEventListener("DOMContentLoaded", function () {
   .tx-medium { max-width: 320px; }
   .tx-wide { max-width: 520px; }
   .tx-search { max-width: 420px; }
+  .tx-hidden-select { display: none; }
   .tx-select { font-size: 1em; }
   .tx-suffix { margin-left: 0.5em; }
   .tx-note { margin-left: 0.75em; }
@@ -119,6 +309,7 @@ document.addEventListener("DOMContentLoaded", function () {
   <input type="hidden" name="client_id" value="{{ selected_client_id }}">
   <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id }}">
   <input type="hidden" name="return_to" value="{{ return_to or '' }}">
+  <input type="hidden" name="locked_product_id" value="{{ locked_product_id or '' }}">
   <input type="hidden" name="order_draft_id" value="{{ order_draft_id or '' }}">
   <input type="hidden" name="actor_id" value="{{ actor_id or '' }}">
   <input type="hidden" name="actor_role" value="{{ actor_role or '' }}">
@@ -166,25 +357,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
   <div class="form-row">
     <label for="transaction_date">Transactiedatum</label>
-    <input type="date" name="transaction_date" id="transaction_date" value="{{ transaction_date }}" required class="tx-short">
+    <input type="date" name="transaction_date" id="transaction_date" value="{{ transaction_date }}" required class="tx-short" {% if not tx_date_edit_enabled %}readonly{% endif %}>
   </div>
 
   <div class="form-row">
-    <label for="instrument_search">Zoek instrument</label>
-    <input type="text" id="instrument_search" placeholder="Zoek op naam of type" class="tx-search" autocomplete="off">
-  </div>
-
-  <div class="form-row">
-    <label for="product_id">Instrument</label>
-    <select name="product_id" id="product_id" required class="tx-wide tx-select">
-      {% for kind, items in products_by_type.items() %}
-        {% for pid, prod in items %}
-      <option value="{{ pid }}" {% if pid == selected_product_id %}selected{% endif %}>
-        [{{ kind|upper }}] {{ prod.description }}{% if position_by_product.get(pid, 0) > 0 %} (positie: {{ position_by_product.get(pid) }}){% endif %}
-      </option>
-        {% endfor %}
+    <label>Instrument</label>
+    {% if instrument_locked %}
+    <span>{{ selected_instrument_label or '-' }}</span>
+    <input type="hidden" name="product_id" value="{{ selected_product_id or '' }}">
+    {% else %}
+    <input type="text" id="instrument_input" class="tx-wide" list="instrument_suggestions" autocomplete="off" placeholder="Zoek op ISIN, naam of ID" value="{{ selected_instrument_label or '' }}">
+    <datalist id="instrument_suggestions"></datalist>
+    <select name="product_id" id="product_id" required class="tx-wide tx-select tx-hidden-select">
+      <option value="" {% if not selected_product_id %}selected{% endif %}>Selecteer instrument</option>
+      {% for item in instrument_choices %}
+      <option value="{{ item.id }}" data-search="{{ item.search_text }}" {% if item.id == selected_product_id %}selected{% endif %}>{{ item.label }}</option>
       {% endfor %}
     </select>
+    {% endif %}
   </div>
 
   <div class="form-row">
@@ -206,8 +396,14 @@ document.addEventListener("DOMContentLoaded", function () {
   </div>
   {% else %}
   <div class="form-row">
-    <label>Market koers</label>
-    <span>{% if used_price is not none %}{{ used_price }}{% else %}-{% endif %}</span>
+    <label>Actuele koers</label>
+    <span>
+      {% if used_price is not none %}
+        {{ used_price }}{% if used_price_date %} ({{ used_price_date.isoformat() }}){% endif %}
+      {% else %}
+        -
+      {% endif %}
+    </span>
     <input type="hidden" name="price" id="price" value="{{ price or '' }}">
   </div>
   {% endif %}
@@ -228,19 +424,16 @@ document.addEventListener("DOMContentLoaded", function () {
   </div>
 
   <div class="form-row">
-    <label>Beschikbare positie</label>
-    <span>{{ current_position }}</span>
-  </div>
-
-  <div class="form-row">
     <label>Transactiekosten</label>
     <span>{% if estimated_cost is not none and selected_settlement_currency %}{{ format_currency(estimated_cost, selected_settlement_currency) }}{% else %}-{% endif %}</span>
   </div>
 
+  {% if current_product_kind == 'bond' %}
   <div class="form-row">
     <label>Opgelopen rente</label>
     <span>{% if estimated_accrued is not none and selected_settlement_currency %}{{ format_currency(estimated_accrued, selected_settlement_currency) }}{% else %}-{% endif %}</span>
   </div>
+  {% endif %}
 
   <div class="form-row">
     <label>Totaalbedrag</label>
@@ -259,16 +452,8 @@ document.addEventListener("DOMContentLoaded", function () {
 <div class="form-row">
   <label>Bekende placeholders</label>
   <div>
-    <ul>
-      {% for warning in order_warnings %}
-      <li>{{ warning }}</li>
-      {% endfor %}
-      {% if not order_warnings %}
-        {% for item in order_placeholder_messages %}
-        <li>{{ item }}</li>
-        {% endfor %}
-      {% endif %}
-    </ul>
+    {% for warning in order_warnings %}<div>- {{ warning }}</div>{% endfor %}
+    {% if not order_warnings %}{% for item in order_placeholder_messages %}<div>- {{ item }}</div>{% endfor %}{% endif %}
   </div>
 </div>
 {% endif %}
