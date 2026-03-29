@@ -12,7 +12,6 @@ document.addEventListener("DOMContentLoaded", function () {
   const instrumentSuggestions = document.getElementById("instrument_suggestions");
   const templateSelect = document.getElementById("template");
   const orderTypeSelect = document.getElementById("order_type");
-  const txDateInput = document.getElementById("transaction_date");
   const amountInput = document.getElementById("amount");
   const priceInput = document.getElementById("price");
   const settlementSelect = document.getElementById("settlement_currency");
@@ -39,8 +38,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  let autoSubmitTimer = null;
-
   function requestRefresh() {
     if (refreshSubmitter) {
       form.requestSubmit(refreshSubmitter);
@@ -49,32 +46,21 @@ document.addEventListener("DOMContentLoaded", function () {
     form.requestSubmit();
   }
 
-  function canAutoPreviewSubmit() {
-    if (!instrumentSelect || !instrumentSelect.value) {
-      return false;
-    }
-    if (!amountInput || !(amountInput.value || "").trim()) {
-      return false;
-    }
-    if (orderTypeSelect && orderTypeSelect.value === "LIMIT" && priceInput && !(priceInput.value || "").trim()) {
-      return false;
-    }
-    if (settlementSelect && !settlementSelect.disabled && !(settlementSelect.value || "").trim()) {
-      return false;
-    }
-    return true;
-  }
+  const lastCommitted = {
+    amount: (amountInput && amountInput.value ? amountInput.value : "").trim(),
+    price: (priceInput && priceInput.value ? priceInput.value : "").trim(),
+  };
 
-  function scheduleAutoSubmit(delayMs) {
-    if (autoSubmitTimer) {
-      window.clearTimeout(autoSubmitTimer);
+  function commitNumericField(fieldName, inputElement) {
+    if (!inputElement) {
+      return;
     }
-    autoSubmitTimer = window.setTimeout(function () {
-      if (!canAutoPreviewSubmit()) {
-        return;
-      }
-      requestRefresh();
-    }, delayMs);
+    const current = (inputElement.value || "").trim();
+    if (lastCommitted[fieldName] === current) {
+      return;
+    }
+    lastCommitted[fieldName] = current;
+    requestRefresh();
   }
 
   function clearDependentFields() {
@@ -85,43 +71,11 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  function filterInstruments(term) {
-    if (!instrumentSelect) return;
-    const selectedValue = instrumentSelect.value;
-    const lower = (term || "").trim().toLowerCase();
-    instrumentSelect.innerHTML = "";
-
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Selecteer instrument";
-    if (!selectedValue) {
-      placeholder.selected = true;
-    }
-    instrumentSelect.appendChild(placeholder);
-
-    for (const item of baseOptions) {
-      if (!item.value) {
-        continue;
-      }
-      if (lower && !item.searchText.includes(lower)) {
-        continue;
-      }
-      const option = document.createElement("option");
-      option.value = item.value;
-      option.textContent = item.label;
-      option.dataset.search = item.searchText;
-      if (item.value === selectedValue || (!selectedValue && item.selected)) {
-        option.selected = true;
-      }
-      instrumentSelect.appendChild(option);
-    }
-  }
-
   function normalizeText(value) {
     return (value || "").trim().toLowerCase().replace(/\s+/g, " ");
   }
 
-  function findInstrumentMatch(typed) {
+  function findExactInstrumentMatch(typed) {
     const value = (typed || "").trim();
     if (!value) {
       return null;
@@ -134,15 +88,6 @@ document.addEventListener("DOMContentLoaded", function () {
     const exactId = baseOptions.find((item) => item.value && item.value === value);
     if (exactId) {
       return exactId;
-    }
-    const isinToken = `isin: ${lower}`;
-    const exactIsin = baseOptions.find((item) => item.value && item.searchText.includes(isinToken));
-    if (exactIsin && lower.length >= 6) {
-      return exactIsin;
-    }
-    const filtered = baseOptions.filter((item) => item.value && item.searchText.includes(lower));
-    if (filtered.length === 1) {
-      return filtered[0];
     }
     return null;
   }
@@ -173,24 +118,64 @@ document.addEventListener("DOMContentLoaded", function () {
     instrumentInput.value = selectedOption.textContent || "";
   }
 
-  function syncSelectionWithInput() {
-    if (!instrumentInput || !instrumentSelect) return false;
-    const typed = (instrumentInput.value || "").trim();
-    if (!typed) {
-      instrumentSelect.value = "";
-      updateInstrumentInputValidity(false);
-      return false;
+  let selectedInstrumentValue = instrumentSelect && instrumentSelect.value ? instrumentSelect.value : "";
+  let selectedInstrumentLabel = instrumentInput ? (instrumentInput.value || "").trim() : "";
+  let searchRestoreValue = selectedInstrumentValue;
+  let searchRestoreLabel = selectedInstrumentLabel;
+  let searchMode = false;
+
+  function applySelectedInstrumentState() {
+    if (!instrumentInput) {
+      return;
     }
-    const exactMatch = findInstrumentMatch(typed);
-    if (!exactMatch) {
-      instrumentSelect.value = "";
-      updateInstrumentInputValidity(false);
-      return false;
+    instrumentInput.readOnly = !!selectedInstrumentValue;
+    if (selectedInstrumentValue && selectedInstrumentLabel) {
+      instrumentInput.value = selectedInstrumentLabel;
     }
-    instrumentInput.value = exactMatch.label;
-    instrumentSelect.value = exactMatch.value;
     updateInstrumentInputValidity(true);
+  }
+
+  function startInstrumentSearch(initialTerm) {
+    if (!instrumentInput || !instrumentSelect) {
+      return;
+    }
+    if (!searchMode) {
+      searchRestoreValue = selectedInstrumentValue;
+      searchRestoreLabel = selectedInstrumentLabel;
+    }
+    searchMode = true;
+    selectedInstrumentValue = "";
+    selectedInstrumentLabel = "";
+    instrumentSelect.value = "";
+    instrumentInput.readOnly = false;
+    instrumentInput.value = initialTerm || "";
+    renderSuggestionList(instrumentInput.value);
+    updateInstrumentInputValidity(false);
+  }
+
+  function selectInstrument(match) {
+    if (!instrumentInput || !instrumentSelect || !match) {
+      return false;
+    }
+    selectedInstrumentValue = match.value;
+    selectedInstrumentLabel = match.label;
+    instrumentSelect.value = match.value;
+    instrumentInput.value = match.label;
+    searchMode = false;
+    applySelectedInstrumentState();
     return true;
+  }
+
+  function restoreInstrumentAfterSearchCancel() {
+    if (!instrumentInput || !instrumentSelect) {
+      return;
+    }
+    searchMode = false;
+    selectedInstrumentValue = searchRestoreValue || "";
+    selectedInstrumentLabel = searchRestoreLabel || "";
+    instrumentSelect.value = selectedInstrumentValue;
+    applySelectedInstrumentState();
+    renderSuggestionList("");
   }
 
   if (instrumentSelect) {
@@ -202,34 +187,48 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   if (instrumentInput) {
+    applySelectedInstrumentState();
     renderSuggestionList(instrumentInput.value || "");
     instrumentInput.addEventListener("input", function () {
-      filterInstruments(instrumentInput.value);
-      renderSuggestionList(instrumentInput.value);
-      if (syncSelectionWithInput()) {
-        clearDependentFields();
-        requestRefresh();
+      if (!searchMode) {
+        startInstrumentSearch(instrumentInput.value);
+        return;
       }
+      renderSuggestionList(instrumentInput.value);
+      updateInstrumentInputValidity(false);
     });
     instrumentInput.addEventListener("change", function () {
-      if (syncSelectionWithInput()) {
+      if (!searchMode) {
+        return;
+      }
+      const exactMatch = findExactInstrumentMatch(instrumentInput.value);
+      if (selectInstrument(exactMatch)) {
         clearDependentFields();
         requestRefresh();
+        return;
       }
+      updateInstrumentInputValidity(false);
     });
     instrumentInput.addEventListener("keydown", function (event) {
-      if (event.key === "Enter" && syncSelectionWithInput()) {
-        event.preventDefault();
-        clearDependentFields();
-        requestRefresh();
-      }
       if (event.key === "Escape") {
         event.preventDefault();
-        instrumentInput.value = "";
-        instrumentSelect.value = "";
-        updateInstrumentInputValidity(false);
-        filterInstruments("");
-        renderSuggestionList("");
+        restoreInstrumentAfterSearchCancel();
+        return;
+      }
+
+      if (instrumentInput.readOnly) {
+        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          startInstrumentSearch(event.key);
+        } else if (event.key === "Backspace" || event.key === "Delete") {
+          event.preventDefault();
+          startInstrumentSearch("");
+        }
+        return;
+      }
+
+      if (event.key === "Enter") {
+        event.preventDefault();
       }
     });
   }
@@ -254,30 +253,35 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  if (txDateInput) {
-    txDateInput.addEventListener("change", function () {
-      requestRefresh();
-    });
-  }
-
   if (amountInput) {
-    amountInput.addEventListener("input", function () {
-      scheduleAutoSubmit(700);
+    amountInput.addEventListener("change", function () {
+      commitNumericField("amount", amountInput);
+    });
+    amountInput.addEventListener("blur", function () {
+      commitNumericField("amount", amountInput);
+    });
+    amountInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        amountInput.blur();
+      }
     });
   }
 
   if (priceInput && priceInput.type !== "hidden") {
-    priceInput.addEventListener("input", function () {
-      scheduleAutoSubmit(700);
+    priceInput.addEventListener("change", function () {
+      commitNumericField("price", priceInput);
+    });
+    priceInput.addEventListener("blur", function () {
+      commitNumericField("price", priceInput);
+    });
+    priceInput.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        priceInput.blur();
+      }
     });
   }
-
-  form.addEventListener("submit", function () {
-    if (autoSubmitTimer) {
-      window.clearTimeout(autoSubmitTimer);
-      autoSubmitTimer = null;
-    }
-  });
 });
 </script>
 <style>
@@ -383,6 +387,7 @@ document.addEventListener("DOMContentLoaded", function () {
   <input type="hidden" name="actor_id" value="{{ actor_id or '' }}">
   <input type="hidden" name="actor_role" value="{{ actor_role or '' }}">
   <input type="hidden" name="actor_channel" value="{{ actor_channel or 'web' }}">
+  <input type="hidden" name="transaction_date" value="{{ transaction_date }}">
   <div class="tx-layout">
     <div class="tx-header">
       <h2 class="tx-title">Transactie</h2>
@@ -413,11 +418,6 @@ document.addEventListener("DOMContentLoaded", function () {
             <option value="MARKET" {% if selected_order_type == 'MARKET' %}selected{% endif %}>MARKET</option>
             <option value="LIMIT" {% if selected_order_type == 'LIMIT' %}selected{% endif %}>LIMIT</option>
           </select>
-        </div>
-
-        <div class="tx-row">
-          <label for="transaction_date">Transactiedatum:</label>
-          <input type="date" name="transaction_date" id="transaction_date" value="{{ transaction_date }}" required class="tx-short" {% if not tx_date_edit_enabled %}readonly{% endif %}>
         </div>
 
         <div class="tx-row">

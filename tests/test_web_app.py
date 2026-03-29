@@ -182,7 +182,13 @@ def test_form_contains_instrument_input_ux_guards_and_shortcuts():
         assert "requestRefresh()" in html
         assert 'event.key === "Enter"' in html
         assert "Kies een instrument uit de suggestielijst." in html
-        assert "scheduleAutoSubmit(700)" in html
+        assert "startInstrumentSearch" in html
+        assert "restoreInstrumentAfterSearchCancel" in html
+        assert "instrumentInput.readOnly" in html
+        assert "commitNumericField" in html
+        assert 'amountInput.addEventListener("blur"' in html
+        assert 'priceInput.addEventListener("blur"' in html
+        assert "scheduleAutoSubmit(700)" not in html
         assert 'id="tx-refresh-submit"' in html
         assert "formnovalidate" in html
 
@@ -274,8 +280,8 @@ def test_transaction_date_is_readonly_by_default():
         response = c.get("/transactions/new?client_id=1&portfolio_id=1")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
-        assert 'id="transaction_date"' in html
-        assert "readonly" in html
+        assert "Transactiedatum:" not in html
+        assert 'type="hidden" name="transaction_date"' in html
 
 
 def test_transaction_date_toggle_allows_editing(monkeypatch):
@@ -290,9 +296,8 @@ def test_transaction_date_toggle_allows_editing(monkeypatch):
         response = c.get("/transactions/new?client_id=1&portfolio_id=1")
         assert response.status_code == 200
         html = response.get_data(as_text=True)
-        assert 'id="transaction_date"' in html
-        assert 'id="transaction_date" value=' in html
-        assert 'id="transaction_date" value=' in html and 'readonly' not in html.split('id="transaction_date"', 1)[1].split('>', 1)[0]
+        assert "Transactiedatum:" not in html
+        assert 'type="hidden" name="transaction_date"' in html
 
 
 def test_instrument_locked_when_entering_from_holdings():
@@ -377,6 +382,44 @@ def test_market_price_is_shown_without_amount_after_instrument_selection():
         assert "Koersdatum:" in html
         assert "27-03-2026" in html
         assert "193.5777" in html
+
+
+def test_market_price_remains_available_when_db_instrument_metadata_overwrites_existing_product(tmp_path):
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    db_path = tmp_path / "instrument_metadata.db"
+    db = Database(str(db_path))
+    db.upsert_instrument(
+        {
+            "instrument_id": 1,
+            "isin": "",
+            "description": "Apple Instrument Metadata",
+            "instrument_type": "STOCK",
+            "issue_currency": "USD",
+            "minimum_purchase_value": 1,
+            "smallest_trading_unit": 1,
+            "start_date": None,
+            "maturity_date": None,
+            "interest_rate": None,
+            "interest_payment_frequency": None,
+        }
+    )
+
+    app = make_app(clients, pc, prices, order_database=db)
+    with app.test_client() as c:
+        response = c.get(
+            "/transactions/new?client_id=1&portfolio_id=1&template=BUY&order_type=MARKET&product_id=1&transaction_date=2026-03-27"
+        )
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Actuele koers" in html
+        assert "193.5777" in html
+        assert "27-03-2026" in html
+
+    db.close()
 
 
 def test_bond_limit_price_percent_is_converted_to_decimal_for_execution():

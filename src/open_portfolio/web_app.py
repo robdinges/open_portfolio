@@ -144,6 +144,13 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 )
             else:
                 continue
+
+            # Keep loaded market data when DB metadata updates an existing instrument.
+            existing_product = product_collection.search_product_id(instrument_id)
+            if existing_product is not None:
+                for p_date, p_value in getattr(existing_product, "prices", []):
+                    product.add_price(p_date, p_value)
+                product.transactions = list(getattr(existing_product, "transactions", []))
             product_collection.add_product(product)
 
     restore_instruments_from_db()
@@ -426,8 +433,11 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 return options, locked
 
             cash_by_currency = {}
-            for (_, curr, atype), account in selected_portfolio.cash_accounts.items():
-                if atype.name == "CASH" and curr not in cash_by_currency:
+            for account in selected_portfolio.cash_accounts.values():
+                if getattr(getattr(account, "account_type", None), "name", "") != "CASH":
+                    continue
+                curr = getattr(account, "currency", None)
+                if curr and curr not in cash_by_currency:
                     cash_by_currency[curr] = account
 
             issue_currency = product.issue_currency
@@ -444,6 +454,11 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 options.append({"currency": issue_currency, "balance": issue_account.balance})
             if default_account and default_currency != issue_currency:
                 options.append({"currency": default_currency, "balance": default_account.balance})
+
+            # Fallback: if specific currencies are unavailable, expose existing cash accounts.
+            if not options:
+                for curr, account in cash_by_currency.items():
+                    options.append({"currency": curr, "balance": account.balance})
             return options, locked
 
         def is_multiple_of_unit(value: float, unit: float) -> bool:
@@ -802,7 +817,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
 
         if estimated_total is None:
             try:
-                if product and selected_settlement_currency:
+                if product:
                     tx_date_preview = parse_tx_date(entered_tx_date)
                     current_market_price, current_market_price_date = get_latest_price_for_date(product, tx_date_preview)
                     amount_preview = parse_optional_decimal(entered_amount)
@@ -813,7 +828,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                         used_price = limit_preview if limit_preview is not None else None
                         used_price_date = None
 
-                    if amount_preview and amount_preview > 0:
+                    if amount_preview and amount_preview > 0 and selected_settlement_currency:
                         if used_price is not None and used_price > 0:
                             execution_price = to_execution_price(product, used_price)
                             fx = get_fx(product.issue_currency, selected_settlement_currency)

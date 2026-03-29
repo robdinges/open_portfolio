@@ -14,8 +14,7 @@ Datum: 2026-03-07
 - Tijdelijke DB-resetknop in UI.
 - Analyse “Verkoop Nu” met meeverkochte rente en 0,1% kosten.
 - Nieuwe SELL-vs-HOLD beslismodule (`BondPosition`, `BondCalculator`, `compare_scenarios`).
-- Analysepagina met transparante tabellen (input, sale, coupon schedule, discounted cashflows, final decision).
-- 3D gevoeligheidsgrafiek toegevoegd (prijs-as ±1%, discount-as 0-5%).
+
 
 ## Must
 
@@ -106,3 +105,5 @@ Datum: 2026-03-07
 
 4. **Valutablootstelling en hedge-overzicht**
    - Exposures per valuta en geaggregeerde effecten.
+
+5. **Analysepagina** met transparante tabellen (input, sale, coupon schedule, discounted cashflows, final decision).
