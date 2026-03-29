@@ -164,7 +164,7 @@ def test_form_contains_dependent_field_reset_javascript():
         assert "templateSelect.addEventListener(\"change\"" in html
 
 
-def test_settlement_account_populated_on_initial_form_load():
+def test_form_contains_instrument_input_ux_guards_and_shortcuts():
     clients, products_list, prices = create_demo_data()
     pc = ProductCollection()
     for prod in products_list:
@@ -176,8 +176,179 @@ def test_settlement_account_populated_on_initial_form_load():
         assert response.status_code == 200
 
         html = response.get_data(as_text=True)
+        assert "submitInProgress" in html
+        assert 'event.key === "Enter"' in html
+        assert "Kies een instrument uit de suggestielijst." in html
+        assert "scheduleAutoSubmit(700)" in html
+
+
+def test_transaction_form_shows_position_formatting_for_stock_and_bond_choices():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "ASML Holding | ID: 5 | ISIN: - | Positie: 150" in html
+        assert "EU Government Bond 2.5% | ID: 101 | ISIN: - | Positie: 10 EUR" in html
+
+
+def test_settlement_account_populated_on_initial_form_load():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1&product_id=5")
+        assert response.status_code == 200
+
+        html = response.get_data(as_text=True)
         assert "Afrekenrekening" in html
         assert "Saldo:" in html
+
+
+def test_transaction_form_default_has_empty_instrument_selection():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Selecteer instrument" in html
+        assert "Apple Inc." not in html.split("value=\"\"", 1)[0]
+
+
+def test_transaction_form_hides_accrued_interest_for_stock():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1&product_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Opgelopen rente" not in html
+
+
+def test_transaction_form_shows_accrued_interest_for_bond():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1&product_id=101")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Opgelopen rente" in html
+
+
+def test_transaction_date_is_readonly_by_default():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'id="transaction_date"' in html
+        assert "readonly" in html
+
+
+def test_transaction_date_toggle_allows_editing(monkeypatch):
+    monkeypatch.setenv("OPEN_PORTFOLIO_ENABLE_TX_DATE_EDIT", "1")
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'id="transaction_date"' in html
+        assert "readonly" not in html
+
+
+def test_instrument_locked_when_entering_from_holdings():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get("/transactions/new?client_id=1&portfolio_id=1&product_id=1&return_to=holdings")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'id="instrument_input"' not in html
+        assert 'name="product_id" value="1"' in html
+
+
+def test_inactive_instrument_not_shown_in_transaction_picker_and_rejected_on_post():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        get_response = c.get("/transactions/new?client_id=1&portfolio_id=1")
+        assert get_response.status_code == 200
+        get_html = get_response.get_data(as_text=True)
+        assert "ID: 201" not in get_html
+
+        post_response = c.post(
+            "/transactions/new",
+            data={
+                "client_id": "1",
+                "portfolio_id": "1",
+                "template": "BUY",
+                "order_type": "MARKET",
+                "product_id": "201",
+                "amount": "1000",
+                "transaction_date": "2026-03-29",
+                "settlement_currency": "EUR",
+                "save": "1",
+            },
+        )
+        assert post_response.status_code == 200
+        post_html = post_response.get_data(as_text=True)
+        assert "Instrument is inactief en kan niet verhandeld worden" in post_html
+
+
+def test_market_price_label_uses_actuele_koers_with_date():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        response = c.get(
+            "/transactions/new?client_id=1&portfolio_id=1&template=BUY&order_type=MARKET&product_id=1&amount=1&settlement_currency=USD&transaction_date=2026-03-27"
+        )
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert "Actuele koers" in html
+        assert "(2026-03-27)" in html
 
 
 def test_bond_limit_price_percent_is_converted_to_decimal_for_execution():
@@ -537,3 +708,22 @@ def test_instrument_add_persists_across_app_instances(tmp_path):
     assert loaded is not None
     assert loaded.type.name == "FUND"
     db2.close()
+
+
+def test_instruments_page_hides_inactive_by_default_and_can_show_them():
+    clients, products_list, prices = create_demo_data()
+    pc = ProductCollection()
+    for prod in products_list:
+        pc.add_product(prod)
+
+    app = make_app(clients, pc, prices)
+    with app.test_client() as c:
+        default_resp = c.get("/instruments?client_id=1&portfolio_id=1")
+        assert default_resp.status_code == 200
+        default_html = default_resp.get_data(as_text=True)
+        assert "Austria 15-03-2026" not in default_html
+
+        show_resp = c.get("/instruments?client_id=1&portfolio_id=1&show_inactive=1")
+        assert show_resp.status_code == 200
+        show_html = show_resp.get_data(as_text=True)
+        assert "Austria 15-03-2026" in show_html
