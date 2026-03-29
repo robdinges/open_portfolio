@@ -1,24 +1,36 @@
 # OpenPortfolio Features & Data Model
 
-Dit document geeft een overzicht van de belangrijkste mogelijkheden en de datastructuur van OpenPortfolio.
+Dit document geeft een overzicht van de belangrijkste mogelijkheden en
+de datastructuur van OpenPortfolio.
 
 ## Features
 
-- **Modulair & uitbreidbaar:** Accounts, clients, producten, transacties, pricing, GUI, rapportage, database.
-- **Meerdere user interfaces:**
-  - Desktop GUI (Tkinter)
-  - Web GUI (Flask)
-- **Demo data generator:** Automatisch realistische datasets voor testen en demo’s.
+- **Modulair & uitbreidbaar:** Accounts, clients, producten, transacties,
+  pricing, rapportage, analytics, database.
+- **Webinterface (Flask):** Dashboard, holdings, transacties, orderinvoer,
+  instrumentbeheer, order-draft monitoring, rekeningenoverzicht.
+- **Orderinvoer:** Volledig transactieformulier met draft/validate/submit-
+  workflow, BUY/SELL met MARKET/LIMIT, instrumentzoeker met positie-
+  indicator, kostencalculatie, opgelopen rente, FX-conversie.
+- **Instrumentbeheer:** Aandelen en obligaties toevoegen en bewerken via
+  web-UI; opties en fondsen ondersteund als producttype; persistentie in
+  SQLite; actief/inactief-filtering.
+- **Order-draft lifecycle:** Conceptorders met status
+  (DRAFT/VALIDATED/REJECTED/SUBMITTED), SQLite-persistentie,
+  retentiebeleid en monitoringpagina.
+- **Demo data generator:** Automatisch realistische datasets voor testen en
+  demo's (27 producten, 3 portefeuilles, 10 transacties).
 - **Transactietemplates:** BUY, SELL, DEPOSIT, DIVIDEND (met validatie).
-- **Multi-valuta:** EUR, USD, automatische FX-conversie.
-- **Producten:** Aandelen en obligaties (incl. rente-opbouw, aflossing).
-- **Rapportage:** Overzicht, holdings, transacties, kaspositie (console of tekstbestand).
-- **Web UI:** Laatste 5 transacties, actuele posities en kas direct zichtbaar.
-- **Database:** SQLite persistence voor clients en portefeuilles.
-- **Testen:** Uitgebreide pytest suite.
-- **CLI & demo:** Headless GUI, demo webserver, scriptbare dataset/report generatie.
+- **Multi-valuta:** EUR, USD, GBP, CHF, NOK met automatische FX-conversie.
+- **Producten:** Aandelen, obligaties, opties en fondsen (incl. rente-opbouw
+  en aflossing voor obligaties).
+- **Rapportage:** Overzicht, holdings, transacties, kaspositie
+  (console, tekst en markdown).
+- **Database:** SQLite-persistentie voor clients, portefeuilles, conceptorders
+  en instrumenten met thread-safe wrapper.
+- **Testen:** Uitgebreide pytest-suite (49 tests).
 
-## Objectmodel (vereenvoudigd)
+## Objectmodel
 
 ```
 Client
@@ -27,122 +39,153 @@ Client
          │      ├─ balance, start_balance, transactions
          │      └─ get_balance(valuation_date)
          ├─ securities_account: SecuritiesAccount
-         │      ├─ holdings: List[{product,amount}]
+         │      ├─ holdings: List[{product, amount}]
          │      └─ get_holding_values(valuation_date)
-         ├─ list_all_transactions() -> serializable list of tx dicts
+         ├─ list_all_transactions() -> list of tx dicts
          └─ calculate_holding_value(valuation_date)
 
 CashAccount
   ├─ cash_account_id, currency, account_type
   ├─ start_balance, balance, exchange_rate
   ├─ transactions: List[Transaction]
-  └─ methods to add transactions and compute balance
+  └─ methods: add_transaction(), get_balance(date)
 
 SecuritiesAccount
   ├─ portfolio_id, currency, start_date
-  ├─ holdings: each contains product and amount
-  └─ calculate values for holdings as of a date
+  ├─ holdings: List[{product, amount}]
+  └─ get_holding_values(valuation_date)
 
-Product (Stock/Bond)
-  ├─ product_id/instrument_id, description, currency
+Product (base)
+  ├─ instrument_id, description, type (InstrumentType)
+  ├─ issue_currency, isin
   ├─ minimum_purchase_value, smallest_trading_unit
-  └─ (voor Bond: interest, maturity, payment_frequency)
+  ├─ prices: List[(date, price)]
+  ├─ transactions: List[SecurityMovement]
+  └─ methods: add_price(), get_price(date), is_bond(), is_active()
 
-Zie de code en docstrings voor meer details.
-  ├─ instrument_id, description, issue_currency
-  ├─ minimum_purchase_value, smallest_trading_unit
-  ├─ transactions: list of security movements
-  ├─ get_price(date) via CurrencyPrices
-  └─ subclasses: Stock, Bond
+Stock (Product)
+  └─ type = InstrumentType.STOCK
 
 Bond (Product)
   ├─ start_date, maturity_date
-  ├─ interest_rate, payment_frequency
-  └─ calculate_accrued_interest(date)
-
-TransactionManager
-  ├─ create transaction objects using templates
-  ├─ execute_transaction(tx, portfolio, product_collection)
-  └─ simple validation (no negative cash balances)
-
-Transactions & Movements
-  ├─ Transaction object contains metadata and lists of
-  │  cash_movements and security_movements
-  ├─ Movement objects include amount, currency, exchange rate
-  └─ Portfolios record transactions in cash accounts
+  ├─ interest_rate, interest_payment_frequency
+  └─ calculate_accrued_interest(nominal, date, interest_type)
 
 ProductCollection
-  ├─ registry of products keyed by instrument_id
-  ├─ add_product()/get_product()/iterable access
+  ├─ registry van producten op instrument_id
+  └─ add_product(), get_product(), iterable
+
+TransactionManager
+  ├─ create_transaction() met templates
+  ├─ execute_transaction(tx, portfolio, product_collection)
+  └─ create_and_execute_transaction() (combined)
+
+Transaction
+  ├─ transaction_number, transaction_date, portfolio_id
+  ├─ cash_movements: List[CashMovement]
+  ├─ security_movements: List[SecurityMovement]
+  └─ to_dict(), validate()
+
+OrderDraft
+  ├─ draft_id, status (OrderStatus enum)
+  ├─ payload: Dict, validity_date
+  ├─ errors, warnings
+  └─ created_at, updated_at
+
+OrderStatus (Enum)
+  └─ DRAFT, VALIDATED, REJECTED, SUBMITTED
+
+InMemoryOrderRepository / DatabaseOrderRepository
+  └─ upsert_draft(), get_draft(), set_status()
 
 CurrencyPrices
   ├─ maps (currency, date) -> price
-  ├─ used for FX conversion and valuation
+  └─ FX-conversie en waardering
 
-Reporting
-  ├─ PortfolioReporter(clients)
-  ├─ print_summary(), print_detailed_holdings(),
-  │  print_transaction_history(), print_cash_position()
+PortfolioReporter
+  ├─ print_summary(), print_detailed_holdings()
+  ├─ print_transaction_history(), print_cash_position()
   ├─ print_all_reports()
-  └─ to_text() for exporting
+  └─ to_text(), to_markdown()
 
-Database
-  ├─ SQLite wrapper with tables for clients and portfolios
-  ├─ save_client(), save_portfolio(), get_clients(), get_portfolios()
-  └─ Intended for simple persistence/demos
+PortfolioAnalytics
+  └─ get_holdings_progress(product_id) -> historisch verloop
 
-GUI & Web UI
-  ├─ `gui.py` (Tkinter) – desktop application with demo & headless flags
-  └─ `web_app.py` (Flask) – local web server with transaction form and
-     instant portfolio summaries
+Database (SQLite)
+  ├─ tabellen: client, portfolio, order_draft, instrument
+  ├─ add_client(), add_portfolio(), get_clients(), get_portfolios()
+  ├─ upsert_order_draft(), get_order_draft(), list_order_drafts()
+  ├─ purge_stale_order_drafts(), get_order_draft_status_counts()
+  └─ upsert_instrument(), list_instruments()
+
+Enums
+  ├─ TransactionTemplate: BUY, SELL, DIVIDEND, DEPOSIT
+  ├─ InstrumentType: STOCK, BOND, FUND, OPTION
+  ├─ AccountType: CASH, SAVINGS, OBLIGO, DEPOSIT, SECURITIES
+  ├─ PaymentFrequency: MONTH, YEAR, END_DATE
+  ├─ InterestType: ACT_ACT, THIRTY_360
+  ├─ MovementType: TAX, COSTS, SECURITY_BUY, SECURITY_SELL,
+  │     ACCRUED_INTEREST, DEPOSIT, WITHDRAWAL, INTEREST, etc.
+  └─ QuotationType: NOMINAL, AMOUNT
 ```
+
+## Webinterface routes
+
+| Route | Methode | Functie |
+|---|---|---|
+| `/` | GET | Dashboard met client/portefeuilleselectie |
+| `/holdings` | GET | Effecten- en kasposities |
+| `/transactions` | GET | Transactieoverzicht |
+| `/transactions/new` | GET/POST | Orderinvoerformulier |
+| `/accounts` | GET | Kasrekeningenoverzicht |
+| `/instruments` | GET/POST | Instrumentenlijst en toevoegen |
+| `/instruments/new` | GET/POST | Nieuw instrument aanmaken |
+| `/instruments/edit/<id>` | GET/POST | Instrument bewerken |
+| `/order-drafts` | GET/POST | Order-draft monitoring en opschoning |
+| `/healthz` | GET | Health check endpoint |
 
 ## Typical Workflows
 
-1. **Experiment with realistic data**
+1. **Experiment met realistische data**
    ```python
    from open_portfolio.sample_data import create_realistic_dataset
+   from open_portfolio.reporting import PortfolioReporter
+
    ds = create_realistic_dataset()
-   clients = ds['clients']
-   reporter = PortfolioReporter(clients)
+   reporter = PortfolioReporter(ds['clients'])
    reporter.print_all_reports()
    ```
 
-2. **Run web interface**
+2. **Webinterface starten**
    ```bash
    PYTHONPATH=src .venv/bin/python3 -m open_portfolio.web_app
-   # browse to http://127.0.0.1:5000
+   # browse naar http://127.0.0.1:5000
    ```
-   execute trades and watch portfolio summary appear below the form.
 
-3. **Inspect transactions programmatically**
+3. **Transacties inspecteren**
    ```python
-   p = clients[0].portfolios[0]
+   p = ds['clients'][0].portfolios[0]
    print(p.list_all_transactions())
    p.list_holdings()
    ```
 
-4. **Persist to database**
+4. **Database-persistentie**
    ```python
    from open_portfolio.database import Database
-   db = Database('test.db')
-   for c in clients:
+
+   db = Database('demo.sqlite')
+   for c in ds['clients']:
        db.add_client(c)
-   for p in clients[0].portfolios:
+   for p in ds['portfolios']:
        db.add_portfolio(p)
    ```
 
-## Notes for Next Time
+## Notes
 
-- Always set `PYTHONPATH=src` or install package in editable mode.
-- Tests exercise most functionality; add more tests when you extend a
-  module.
-- The demo dataset can be re-used in both CLI, GUI and web contexts.
-- Documentation is scattered across docstrings, `GETTING_STARTED.md`,
-  and `FEATURES.md` – search for keywords like "PortfolioReporter" or
-  "create_realistic_dataset" if you forget the exact API.
-
----
-
-Keep this file handy; it’s the quickest route to remembering how the
-library is put together.
+- Stel altijd `PYTHONPATH=src` in of installeer het package in
+  editable mode.
+- Tests oefenen het overgrote deel van de functionaliteit; voeg tests
+  toe bij het uitbreiden van modules.
+- De demo-dataset is bruikbaar in zowel CLI, web als notebook-context.
+- Documentatie staat verspreid over docstrings, `GETTING_STARTED.md`,
+  `FEATURES.md` en de overige `.md`-bestanden.

@@ -1,6 +1,6 @@
 # Requirements — Bond Portfolio Tool
 
-Datum: 2026-03-07
+Datum: 2026-03-29
 Status: Werkende baseline (bijgewerkt)
 
 ## 1) Scope
@@ -208,11 +208,23 @@ Het systeem ondersteunt:
 ### FR-25 — Formuliergedrag, navigatie en input parsing
 
 - Gebruiker kan kiezen voor:
-  - akkoord: transactie vastleggen en navigeren naar transactieoverzicht,
+  - bewaren: order opslaan als concept (status DRAFT),
+  - bevestigen: order valideren (status VALIDATED),
+  - routeren: transactie definitief vastleggen (status SUBMITTED) en navigeren naar transactieoverzicht,
   - annuleren: formulier schonen en navigeren naar vorig scherm.
 - Decimalen mogen met komma of punt worden ingevoerd.
 - Bij wijziging van instrument worden afhankelijke velden erna geschoond en conditioneel opnieuw getoond.
 - Bij wijziging van transactiesoort worden afhankelijke velden erna geschoond en conditioneel opnieuw getoond.
+- Herberekening van afgeleide velden vindt plaats bij blur of change, niet bij elke toetsaanslag.
+- Het formulier bevat een optioneel geldigheidsdatumveld (`validity_date`) voor de order.
+
+### FR-25a — Instrumentzoeker UX
+
+- Het instrumentveld is een zoekbaar tekstveld met dropdown-suggesties (datalist).
+- De gebruiker moet expliciet een suggestie aanklikken om een instrument te selecteren.
+- Na selectie wordt het veld read-only en toont het de instrumentnaam.
+- Met ESC in zoekmode wordt de vorige selectie hersteld.
+- Bij navigatie vanuit holdings is het instrument voorgeselecteerd en vergrendeld.
 
 ### FR-26 — Normatieve detailspecificatie orderinvoer
 

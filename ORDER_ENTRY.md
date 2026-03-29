@@ -1,6 +1,6 @@
 # Order Entry Specificatie
 
-Datum: 2026-03-26
+Datum: 2026-03-29
 Status: Normatieve functionele specificatie voor orderinvoer
 
 ## Doel en scope
@@ -29,8 +29,9 @@ Het orderscherm maakt expliciet onderscheid tussen:
 7. Valideer orderhoeveelheid op:
 - handelseenheid (`smallest_trading_unit`)
 - minimale ordergrootte (`minimum_purchase_value`)
-8. Toon transactiekosten, eventuele opgelopen rente en ordertotaal.
-9. Kies akkoord of annuleren.
+8. Optioneel: stel een geldigheidsdatum in voor de order (`validity_date`).
+9. Toon transactiekosten, eventuele opgelopen rente en ordertotaal.
+10. Kies akkoord of annuleren.
 
 ## Veldregels per instrumenttype
 
@@ -101,6 +102,21 @@ Het orderscherm maakt expliciet onderscheid tussen:
 - Voorbeeld:
 - `100,23` en `100.23` worden beide als 100.23 geïnterpreteerd.
 
+## Instrumentzoeker UX
+
+- Het instrumentveld is een zoekbaar tekstveld met dropdown-suggesties.
+- Bij laden van het formulier is het veld leeg; de gebruiker typt om te filteren.
+- De gebruiker moet expliciet een suggestie aanklikken om een instrument te selecteren.
+- Na selectie wordt het veld read-only en toont het de instrumentnaam.
+- De gebruiker kan opnieuw zoeken door in het veld te typen; dit wist de huidige selectie en opent de zoekmode.
+- Met ESC in zoekmode wordt de vorige selectie hersteld.
+- Bij navigatie vanuit holdings is het instrument voorgeselecteerd en vergrendeld.
+
+## Geldigheidsdatum
+
+- Het formulier bevat een optioneel veld `validity_date` voor de geldigheidsdatum van de order.
+- Dit veld wordt meegegeven in de draft-payload en bewaard bij opslaan.
+
 ## Dynamisch resetgedrag
 
 ### Bij wijziging instrument
@@ -115,12 +131,18 @@ Het orderscherm maakt expliciet onderscheid tussen:
 
 ## Uitkomstacties
 
-- Akkoord:
-- transactie wordt vastgelegd
-- gebruiker navigeert naar transactiescherm
+- Bewaren (Draft):
+  - order wordt opgeslagen als concept met status DRAFT
+  - gebruiker blijft op formulierscherm
+- Bevestigen (Validate):
+  - order wordt gevalideerd en krijgt status VALIDATED
+  - gebruiker blijft op formulierscherm met validatieresultaat
+- Routeren (Submit):
+  - transactie wordt definitief vastgelegd met status SUBMITTED
+  - gebruiker navigeert naar transactiescherm
 - Annuleren:
-- formulier wordt geschoond
-- gebruiker navigeert naar vorige scherm
+  - formulier wordt geschoond
+  - gebruiker navigeert naar vorige scherm
 
 ## Implementatie-aanwijzingen
 

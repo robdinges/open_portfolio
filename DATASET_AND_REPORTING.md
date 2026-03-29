@@ -1,266 +1,213 @@
-# OpenPortfolio: Realistic Dataset & Reporting Module
+# OpenPortfolio: Dataset & Reporting
 
-## Overview
+## Overzicht
 
-This document describes the realistic dataset generation and comprehensive reporting capabilities added to OpenPortfolio.
+Dit document beschrijft de demo-dataset en rapportagemogelijkheden van
+OpenPortfolio.
 
-## Dataset Generation (`src/open_portfolio/sample_data.py`)
+## Dataset (`src/open_portfolio/sample_data.py`)
 
-### Function: `create_realistic_dataset()`
+### Functie: `create_realistic_dataset()`
 
-Generates a comprehensive, realistic multi-portfolio dataset suitable for testing and demonstrations.
+Genereert een complete, realistische multi-portfolio dataset voor testen
+en demo's. Alle data wordt geladen vanuit `data/*.json`.
 
-#### Dataset Contents
+### Dataset-inhoud
 
 **Clients (2):**
+
 - Alice Johnson (ID: 1)
 - Bob Smith (ID: 2)
 
-**Portfolios (3):**
-- Portfolio 1: Alice Johnson EUR (€50,000 starting cash)
-- Portfolio 2: Alice Johnson USD ($30,000 starting cash)
-- Portfolio 3: Bob Smith EUR (€75,000 starting cash)
+**Portefeuilles (3):**
 
-**Products (8):**
+- Portfolio 1: Alice Johnson – Groei Europa (EUR, startkas € 50.000)
+- Portfolio 2: Alice Johnson – Tech Amerika (USD, startkas $ 30.000)
+- Portfolio 3: Bob Smith – Obligaties NL (EUR, startkas € 75.000)
 
-*Stocks (5):*
-- Apple Inc. (AAPL) - USD
-- Google Inc. (GOOGL) - USD
-- Tesla Inc. (TSLA) - USD
-- Microsoft Corp. (MSFT) - USD
-- Siemens AG (SIE) - EUR
+**Kasrekeningen:**
 
-*Bonds (3):*
-- EU Government Bond 2.5% - EUR (maturity 2030)
-- Corporate Bond 3.5% - EUR (maturity 2027)
-- US Treasury Bond 4.0% - USD (maturity 2033)
+- Portfolio 1: EUR (50.000), GBP (1.234)
+- Portfolio 2: USD (30.000), EUR (10.000)
+- Portfolio 3: EUR (75.000)
 
-**Realistic Pricing:**
-- Stock prices progress over 6 months (Sept 2025 - Mar 2026)
-- Bond prices quoted per 100 (e.g., 102 = 102% of par)
-- Multi-currency support (EUR, USD) with exchange rates
+**Producten (27):**
 
-**Transactions (10):**
+*Aandelen (5):*
 
-*Alice EUR Portfolio:*
-1. Sept 5, 2025: BUY Siemens 100 @ €145
-2. Oct 1, 2025: BUY EU Bond 10 @ 102
-3. Nov 10, 2025: BUY Corporate Bond 8 @ 101.5
-4. Dec 5, 2025: BUY Siemens 50 @ €151
+- Apple Inc. (AAPL) – USD
+- Microsoft Corp. (MSFT) – USD
+- Alphabet Inc. (GOOGL) – USD
+- Amazon.com (AMZN) – USD
+- ASML Holding (ASML) – EUR
 
-*Alice USD Portfolio:*
-5. Sept 10, 2025: BUY Apple 30 @ $210
-6. Oct 5, 2025: BUY Microsoft 15 @ $385
-7. Nov 1, 2025: BUY US Bond 2 @ 101
+*Basisobligaties (3):*
 
-*Bob EUR Portfolio:*
-8. Sept 15, 2025: BUY EU Bond 30 @ 102
-9. Oct 10, 2025: BUY Siemens 200 @ €147
-10. Nov 15, 2025: BUY Corporate Bond 20 @ 101.5
+- EU Government Bond 2.5% – EUR (looptijd 2030)
+- Rabobank 2027 – EUR (looptijd 2027)
+- US Treasury Bond 4.0% – USD (looptijd 2033)
 
-### Usage
+*Uitgebreide obligaties (19):*
+
+- German, Austrian, French, Irish overheidsobligaties
+- Corporate bonds: BMW, Continental, KFW, Mercedes, SAP, Volkswagen, EIB
+- Electricité de France, ING Green Bond
+- Dutch, Austrian, Spanish overheidsobligaties
+- Valuta: EUR, USD, NOK
+
+**Prijzen:**
+
+- Productprijzen geladen vanuit `data/prices.json`
+- FX-koersen geladen vanuit `data/currency_prices.json`
+  (o.a. USD/EUR, GBP/EUR, NOK/EUR)
+
+**Transacties (10):**
+
+*Alice EUR-portefeuille:*
+
+1. Sept 2025: BUY Siemens/ASML 100 @ €145
+2. Okt 2025: BUY EU Bond 10 @ 102
+3. Nov 2025: BUY Corporate Bond 8 @ 101,5
+4. Dec 2025: BUY Siemens/ASML 50 @ €151
+
+*Alice USD-portefeuille:*
+
+5. Sept 2025: BUY Apple 30 @ $210
+6. Okt 2025: BUY Microsoft 15 @ $385
+7. Nov 2025: BUY US Bond 2 @ 101
+
+*Bob EUR-portefeuille:*
+
+8. Sept 2025: BUY EU Bond 30 @ 102
+9. Okt 2025: BUY Siemens/ASML 200 @ €147
+10. Nov 2025: BUY Corporate Bond 20 @ 101,5
+
+### Gebruik
 
 ```python
 from open_portfolio.sample_data import create_realistic_dataset
 
 dataset = create_realistic_dataset()
 
-# Access components
-clients = dataset['clients']           # List of 2 Client objects
-portfolios = dataset['portfolios']     # List of 3 Portfolio objects
-products = dataset['products']         # List of 8 Product objects
-prices = dataset['prices']             # CurrencyPrices object
-transactions = dataset['transactions'] # List of executed transactions
+clients = dataset['clients']           # List[Client] (2 clients)
+portfolios = dataset['portfolios']     # List[Portfolio] (3 portfolios)
+products = dataset['products']         # ProductCollection (27 producten)
+prices = dataset['prices']             # CurrencyPrices
+transactions = dataset['transactions'] # List (uitgevoerde transacties)
 ```
 
-## Reporting Module (`src/open_portfolio/reporting.py`)
+## Rapportagemodule (`src/open_portfolio/reporting.py`)
 
-### Class: `PortfolioReporter`
-
-Generates comprehensive portfolio reports with multiple output formats.
-
-#### Constructor
+### Klasse: `PortfolioReporter`
 
 ```python
+from open_portfolio.reporting import PortfolioReporter
+
 reporter = PortfolioReporter(clients)
 ```
 
-#### Methods
+### Methoden
 
 **`print_summary(valuation_date=None)`**
-- Displays portfolio totals by client
-- Shows cash and securities values
-- Calculates total portfolio value
-- Example output:
-  ```
-  CLIENT: Alice Johnson (ID: 1)
-  ────────────────────────────────────
-    Portfolio 1 (Alice Johnson): EUR 25,879.37 (Cash: 25,876.79, Securities: 2.57)
-    Portfolio 2 (Alice Johnson): USD 17,600.26 (Cash: 17,600.00, Securities: 0.25)
-  ```
+
+Toont portefeuilletotalen per client: kas, effectenwaarde en totaal.
 
 **`print_detailed_holdings(valuation_date=None)`**
-- Lists all cash accounts with balances
-- Shows securities holdings with current values
-- Includes price information for each position
+
+Lijst alle kasrekeningen met saldi en effectenposities met actuele
+waarde.
 
 **`print_transaction_history()`**
-- Displays all transactions in chronological order
-- Shows date, portfolio, product, quantity, price, and total value
-- Organized by portfolio
+
+Toont alle transacties in chronologische volgorde per portefeuille.
 
 **`print_cash_position(valuation_date=None)`**
-- Analyzes cash by currency and account type
-- Shows cash account balances
-- Useful for liquidity analysis
+
+Kaspositie per valuta en rekeningtype.
 
 **`print_all_reports(valuation_date=None)`**
-- Orchestrates all 4 reports in sequence
-- Comprehensive portfolio overview
+
+Voert alle 4 rapporten achtereenvolgens uit.
 
 **`to_text(valuation_date=None)`**
-- Exports complete report as single string
-- Redirects stdout to capture all report output
-- Useful for file export or email distribution
 
-### Usage Examples
+Exporteert het volledige rapport als string.
+
+**`to_markdown(valuation_date=None)`**
+
+Genereert een markdown-rapport met portefeuilleoverzicht, holdings-
+tabellen en transactiehistorie.
+
+### Voorbeeld
 
 ```python
 from open_portfolio.sample_data import create_realistic_dataset
 from open_portfolio.reporting import PortfolioReporter
 from datetime import date
 
-# Create dataset and reporter
 dataset = create_realistic_dataset()
 reporter = PortfolioReporter(dataset['clients'])
 
-# Generate individual reports
-reporter.print_summary(valuation_date=date(2026, 3, 1))
-reporter.print_detailed_holdings(valuation_date=date(2026, 3, 1))
-reporter.print_transaction_history()
-reporter.print_cash_position(valuation_date=date(2026, 3, 1))
-
-# Generate all reports at once
 reporter.print_all_reports(valuation_date=date(2026, 3, 1))
 
-# Export as text (for file storage)
 report_text = reporter.to_text(valuation_date=date(2026, 3, 1))
 with open('portfolio_report.txt', 'w') as f:
     f.write(report_text)
 ```
 
-## Testing
+## Analytics (`src/open_portfolio/analytics.py`)
 
-### Test File: `tests/test_reporting.py`
+### Klasse: `PortfolioAnalytics`
 
-5 comprehensive test functions verify the dataset and reporting functionality:
+**`get_holdings_progress(product_id)`**
 
-1. **test_realistic_dataset_creation** - Validates dataset structure
-   - Checks 2 clients, 3 portfolios, 8 products
-   - Verifies ≥10 transactions
-   - Confirms client and portfolio properties
+Retourneert het historisch verloop van een positie: datum, hoeveelheid,
+prijs en waarde per tijdstip.
 
-2. **test_portfolio_reporter_summary** - Tests summary report generation
-   - Verifies report header
-   - Checks for client names
-   - Validates date formatting
+## Testen
 
-3. **test_portfolio_reporter_holdings** - Tests detailed holdings report
-   - Checks for cash accounts section
-   - Verifies securities section present
+### Testbestand: `tests/test_reporting.py`
 
-4. **test_portfolio_reporter_transactions** - Tests transaction history
-   - Confirms transaction report generated
-   - Verifies portfolio references
+5 tests valideren de dataset en rapportagefunctionaliteit:
 
-5. **test_portfolio_reporter_text_export** - Tests text export functionality
-   - Validates complete report export
-   - Checks for all major sections
+1. **test_realistic_dataset_creation** – Controleert 2 clients,
+   3 portefeuilles, 27 producten, ≥10 transacties.
+2. **test_portfolio_reporter_summary** – Valideert summary-rapport.
+3. **test_portfolio_reporter_holdings** – Controleert kas- en
+   effectensecties.
+4. **test_portfolio_reporter_transactions** – Controleert
+   transactiehistorie.
+5. **test_portfolio_reporter_text_export** – Valideert tekstexport.
 
-**Test Status:** ✅ All 5 tests passing (14/14 total tests pass)
-
-### Running Tests
+### Tests uitvoeren
 
 ```bash
-# Run reporting tests only
-pytest tests/test_reporting.py -v
+PYTHONPATH=src .venv/bin/python3 -m pytest tests/test_reporting.py -v
 
-# Run all tests
-pytest tests/ -q
-
-# Run with coverage
-pytest tests/ --cov=src/open_portfolio
+# Of alle tests:
+./run_tests.sh
 ```
 
-## Integration
+## Databestanden
 
-### With Web GUI
+De dataset wordt geladen vanuit JSON-bestanden in de `data/` directory:
 
-The dataset can be loaded in the Flask web app for demonstration:
+| Bestand | Inhoud |
+|---|---|
+| `clients.json` | 2 clients met id en naam |
+| `portfolios.json` | 3 portefeuilles met client-koppeling en valuta |
+| `cash_accounts.json` | Kasrekeningen per portefeuille en valuta |
+| `products.json` | 27 producten (aandelen + obligaties) |
+| `prices.json` | Koershistorie per product |
+| `currency_prices.json` | FX-koersen per valutapaar en datum |
+| `transactions.json` | 10 voorbeeldtransacties |
 
-```python
-from open_portfolio.sample_data import create_realistic_dataset
-from open_portfolio.reporting import PortfolioReporter
+## Kenmerken realistische data
 
-dataset = create_realistic_dataset()
-clients = dataset['clients']
-
-# Display in web interface
-reporter = PortfolioReporter(clients)
-report_html = reporter.to_text().replace('\n', '<br>')
-```
-
-### With Desktop GUI
-
-The Tkinter GUI can use the dataset in demo mode:
-
-```bash
-python src/open_portfolio_gui.py --demo
-```
-
-This automatically populates products and pricing from `create_realistic_dataset()`.
-
-### With Database
-
-Save the dataset to SQLite:
-
-```python
-from open_portfolio.database import Database
-from open_portfolio.sample_data import create_realistic_dataset
-
-db = Database('portfolio.db')
-dataset = create_realistic_dataset()
-
-# Save clients and portfolios
-for client in dataset['clients']:
-    db.save_client(client)
-
-for portfolio in dataset['portfolios']:
-    db.save_portfolio(portfolio)
-```
-
-## Performance Notes
-
-- Dataset generation: <1 second
-- Report generation: <100ms
-- Memory footprint: ~5MB for 2 clients, 3 portfolios, 8 products, 10 transactions
-
-## Realistic Data Features
-
-✅ **Multi-currency support** - EUR and USD with realistic exchange rates
-✅ **Realistic price progression** - Stock prices appreciate over 6 months
-✅ **Bond pricing** - Quoted per 100 (standard market convention)
-✅ **Mix of assets** - Stocks and bonds for diversified portfolio
-✅ **Multiple portfolios** - Different clients with different strategies
-✅ **Cash management** - Starting balances match transaction volumes
-✅ **Date progression** - Transactions spread over 6-month period
-✅ **Varying portfolio sizes** - Alice (€80k+$30k), Bob (€75k)
-
-## Future Enhancements
-
-- [ ] Dividend and interest payment transactions
-- [ ] Portfolio rebalancing examples
-- [ ] Tax lot tracking
-- [ ] Performance attribution reports
-- [ ] Risk analysis metrics
-- [ ] Historical data snapshots
+- Multi-valuta: EUR, USD, GBP, CHF, NOK
+- Realistische koersprogressie met dagelijkse variatie
+- Obligatiekoersen in percentages (standaard marktconventie)
+- Mix van aandelen en obligaties voor diversificatie
+- Meerdere portefeuilles met verschillende strategieën
+- Kasrekeningen afgestemd op transactievolumes
+- Transacties verspreid over meerdere maanden

@@ -8,14 +8,22 @@
 
 ## Architecture
 - Core domain lives in src/open_portfolio:
-- accounts.py: Portfolio, cash/securities accounts, holdings valuation.
-- products.py and product_collection.py: instruments and registry.
-- transactions.py: transaction templates, movements, execution flow.
-- prices.py: FX and product pricing.
-- sample_data.py: dataset loader from data/*.json.
-- web_app.py: Flask UI and form flow.
-- reporting.py: console/markdown reporting.
-- database.py: lightweight SQLite persistence.
+  - accounts.py: Portfolio, cash/securities accounts, holdings valuation.
+  - analytics.py: PortfolioAnalytics, holdings progress tracking.
+  - clients.py: Client model with portfolio ownership.
+  - database.py: SQLite persistence (clients, portfolios, order drafts, instruments).
+  - enums.py: TransactionTemplate, InstrumentType, AccountType, etc.
+  - order_entry.py: OrderDraft, OrderStatus, InMemoryOrderRepository, DatabaseOrderRepository.
+  - prices.py: FX and product pricing.
+  - product_collection.py: Product registry.
+  - products.py: Product, Stock, Bond with accrued interest.
+  - reporting.py: console/markdown/text reporting.
+  - sample_data.py: dataset loader from data/*.json.
+  - transactions.py: transaction templates, movements, execution flow.
+  - utils.py: TimeTravel helper.
+  - web_app.py: Flask UI with order entry, instrument management, draft workflow.
+  - wsgi.py: WSGI entry point for deployment.
+- Templates are in src/open_portfolio/templates/ (11 Jinja2 templates).
 - Data fixtures are in data/*.json and are used by create_realistic_dataset().
 
 ## Build and Test
@@ -44,5 +52,8 @@
 - Dataset/reporting details: DATASET_AND_REPORTING.md
 - Product and bond workflow requirements: REQUIREMENTS.md
 - Order-entry specificatie: ORDER_ENTRY.md
+- Order-entry gaps and traceability: ORDER_ENTRY_BACKLOG.md
+- Structured order-entry requirements: ORDER_ENTRY_REQUIREMENTS_STRUCTURED.md
 - Planned work and priorities: BACKLOG.md
+- Best practices and skills: SKILLS.md
 - UI and presentation specifics: .github/instructions.md
