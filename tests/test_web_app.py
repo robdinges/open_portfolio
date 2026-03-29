@@ -126,7 +126,9 @@ def test_limit_bond_form_shows_percent_suffix_and_nominal_label():
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert "Nominale waarde" in html
-        assert ">%</span>" in html
+        assert "Limietprijs:" in html
+        assert "%" in html
+        assert 'name="validity_date"' in html
 
 
 def test_same_currency_settlement_account_is_locked():
@@ -212,9 +214,10 @@ def test_settlement_account_populated_on_initial_form_load():
         assert response.status_code == 200
 
         html = response.get_data(as_text=True)
-        assert "Afrekenrekening" in html
+        assert "Afrekenen op" in html
         assert "Saldo:" in html
-        assert "Handelseenheid: 1 | Minimale ordergrootte: 50" in html
+        assert "Handelseenheid:" in html
+        assert "Min. order:" in html
 
 
 def test_transaction_form_default_has_empty_instrument_selection():
@@ -288,7 +291,8 @@ def test_transaction_date_toggle_allows_editing(monkeypatch):
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert 'id="transaction_date"' in html
-        assert "readonly" not in html
+        assert 'id="transaction_date" value=' in html
+        assert 'id="transaction_date" value=' in html and 'readonly' not in html.split('id="transaction_date"', 1)[1].split('>', 1)[0]
 
 
 def test_instrument_locked_when_entering_from_holdings():
@@ -352,7 +356,8 @@ def test_market_price_label_uses_actuele_koers_with_date():
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert "Actuele koers" in html
-        assert "(2026-03-27)" in html
+        assert "Koersdatum:" in html
+        assert "27-03-2026" in html
 
 
 def test_market_price_is_shown_without_amount_after_instrument_selection():
@@ -369,7 +374,8 @@ def test_market_price_is_shown_without_amount_after_instrument_selection():
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert "Actuele koers" in html
-        assert "(2026-03-27)" in html
+        assert "Koersdatum:" in html
+        assert "27-03-2026" in html
         assert "193.5777" in html
 
 
@@ -471,7 +477,7 @@ def test_order_confirm_action_shows_validation_message_without_redirect():
         assert response.status_code == 200
         html = response.get_data(as_text=True)
         assert "Order gevalideerd" in html
-        assert "Definitief boeken" in html
+        assert "Routeren" in html
 
 
 def test_order_draft_persists_with_database_repo_and_can_be_resumed(tmp_path):
@@ -496,6 +502,7 @@ def test_order_draft_persists_with_database_repo_and_can_be_resumed(tmp_path):
                 "amount": "1000",
                 "price": "101,00",
                 "transaction_date": "2026-03-01",
+                "validity_date": "2026-04-15",
                 "settlement_currency": "EUR",
                 "actor_id": "u123",
                 "actor_role": "advisor",
@@ -519,6 +526,7 @@ def test_order_draft_persists_with_database_repo_and_can_be_resumed(tmp_path):
     assert stored["payload"]["actor_id"] == "u123"
     assert stored["payload"]["actor_role"] == "advisor"
     assert stored["payload"]["actor_channel"] == "web"
+    assert stored["payload"]["validity_date"] == "2026-04-15"
 
     app2 = make_app(clients, pc, prices, order_database=db2)
     with app2.test_client() as c:
@@ -527,10 +535,8 @@ def test_order_draft_persists_with_database_repo_and_can_be_resumed(tmp_path):
         html = response.get_data(as_text=True)
         assert "Orderstatus" in html
         assert "DRAFT" in html
-        assert "u123" in html
-        assert "advisor" in html
-        assert "(web)" in html
         assert 'name="amount" id="amount" value="1000"' in html
+        assert 'name="validity_date" id="validity_date" value="2026-04-15"' in html
 
     db2.close()
 

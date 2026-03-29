@@ -29,6 +29,7 @@ class OrderDraft:
     payload: Dict[str, Any]
     created_at: str
     updated_at: str
+    validity_date: Optional[str] = None
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
 
@@ -62,6 +63,7 @@ class InMemoryOrderRepository:
             draft.payload = payload
             draft.status = status
             draft.updated_at = now
+            draft.validity_date = payload.get("validity_date")
             draft.errors = list(errors or [])
             draft.warnings = list(warnings or [])
             return draft
@@ -72,6 +74,7 @@ class InMemoryOrderRepository:
             payload=payload,
             created_at=now,
             updated_at=now,
+            validity_date=payload.get("validity_date"),
             errors=list(errors or []),
             warnings=list(warnings or []),
         )
@@ -138,6 +141,7 @@ class DatabaseOrderRepository:
             payload=stored["payload"],
             created_at=stored["created_at"],
             updated_at=stored["updated_at"],
+            validity_date=(stored["payload"] or {}).get("validity_date"),
             errors=stored["errors"],
             warnings=stored["warnings"],
         )
@@ -154,6 +158,7 @@ class DatabaseOrderRepository:
             payload=stored["payload"],
             created_at=stored["created_at"],
             updated_at=stored["updated_at"],
+            validity_date=(stored["payload"] or {}).get("validity_date"),
             errors=stored["errors"],
             warnings=stored["warnings"],
         )

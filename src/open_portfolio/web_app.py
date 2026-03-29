@@ -486,6 +486,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             entered_amount = request.form.get("amount", "")
             entered_price = request.form.get("price", "")
             entered_tx_date = request.form.get("transaction_date", date.today().isoformat())
+            entered_validity_date = request.form.get("validity_date", "")
             return_to = request.form.get("return_to", "")
             locked_product_id_raw = request.form.get("locked_product_id", "")
             order_action = request.form.get("action", "")
@@ -505,6 +506,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             entered_amount = request.args.get("amount", "")
             entered_price = request.args.get("price", "")
             entered_tx_date = request.args.get("transaction_date", date.today().isoformat())
+            entered_validity_date = request.args.get("validity_date", "")
             return_to = request.args.get("return_to", "")
             locked_product_id_raw = request.args.get("locked_product_id", "")
             order_action = ""
@@ -550,6 +552,8 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                     entered_price = payload.get("price", entered_price)
                 if request.args.get("transaction_date") is None:
                     entered_tx_date = payload.get("transaction_date", entered_tx_date)
+                if request.args.get("validity_date") is None:
+                    entered_validity_date = payload.get("validity_date", entered_validity_date)
                 if request.args.get("actor_id") is None:
                     actor_id = payload.get("actor_id", actor_id)
                 if request.args.get("actor_role") is None:
@@ -610,6 +614,8 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         estimated_total = None
         used_price = None
         used_price_date = None
+        current_market_price = None
+        current_market_price_date = None
         order_status = "Nieuw"
         order_warnings = []
         order_placeholder_messages = placeholder_messages()
@@ -728,6 +734,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                         "amount": entered_amount,
                         "price": entered_price,
                         "transaction_date": entered_tx_date,
+                        "validity_date": entered_validity_date,
                         "actor_id": actor_id,
                         "actor_role": actor_role,
                         "actor_channel": actor_channel,
@@ -771,6 +778,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                             "amount": entered_amount,
                             "price": entered_price,
                             "transaction_date": entered_tx_date,
+                            "validity_date": entered_validity_date,
                             "actor_id": actor_id,
                             "actor_role": actor_role,
                             "actor_channel": actor_channel,
@@ -796,6 +804,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             try:
                 if product and selected_settlement_currency:
                     tx_date_preview = parse_tx_date(entered_tx_date)
+                    current_market_price, current_market_price_date = get_latest_price_for_date(product, tx_date_preview)
                     amount_preview = parse_optional_decimal(entered_amount)
                     if selected_order_type == "MARKET":
                         used_price, used_price_date = get_latest_price_for_date(product, tx_date_preview)
@@ -822,6 +831,12 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             except Exception:
                 # Preview should never block rendering.
                 pass
+        elif product:
+            try:
+                tx_date_preview = parse_tx_date(entered_tx_date)
+                current_market_price, current_market_price_date = get_latest_price_for_date(product, tx_date_preview)
+            except Exception:
+                pass
 
         instrument_choices = []
         for prod in active_products:
@@ -846,6 +861,16 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             elif selected_product is not None:
                 selected_instrument_label = f"[{product_kind(selected_product).upper()}] {selected_product.description} | ID: {selected_product.instrument_id}"
 
+        position_display = "-"
+        if product is not None:
+            position_display = format_position_for_product(product, current_position)
+
+        transaction_date_display = entered_tx_date
+        try:
+            transaction_date_display = parse_tx_date(entered_tx_date).strftime("%d-%m-%Y")
+        except Exception:
+            pass
+
         return render_template(
             "transaction_form.html",
             clients=clients,
@@ -865,11 +890,14 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             amount=entered_amount,
             price=entered_price,
             transaction_date=entered_tx_date,
+            transaction_date_display=transaction_date_display,
+            validity_date=entered_validity_date,
             settlement_options=settlement_options,
             selected_settlement_currency=selected_settlement_currency,
             selected_settlement_balance=selected_settlement_balance,
             settlement_locked=settlement_locked,
             current_position=current_position,
+            position_display=position_display,
             position_by_product=position_by_product,
             amount_label=amount_label,
             amount_suffix=amount_suffix,
@@ -882,6 +910,8 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             current_product_kind=current_product_kind,
             used_price=used_price,
             used_price_date=used_price_date,
+            current_market_price=current_market_price,
+            current_market_price_date=current_market_price_date,
             estimated_trade=estimated_trade,
             estimated_cost=estimated_cost,
             estimated_accrued=estimated_accrued,

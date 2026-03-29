@@ -281,19 +281,98 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 <style>
-  .tx-short { max-width: 220px; }
-  .tx-medium { max-width: 320px; }
-  .tx-wide { max-width: 520px; }
-  .tx-search { max-width: 420px; }
+  .top-actions { display: none; }
+  .tx-layout { display: grid; gap: 1.25rem; }
+  .tx-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .tx-title { margin: 0; font-size: 2rem; }
+  .tx-context {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem 3rem;
+    border-bottom: 1px solid #222;
+    padding-bottom: 0.9rem;
+  }
+  .tx-context-row {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.05rem;
+  }
+  .tx-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 1.5rem;
+  }
+  .tx-left { display: grid; gap: 0.9rem; }
+  .tx-row {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 0.7rem;
+    align-items: center;
+  }
+  .tx-row label { font-size: 1rem; }
+  .tx-field-inline { display: flex; align-items: center; gap: 0.7rem; }
+  .tx-short { max-width: 240px; width: 100%; }
+  .tx-medium { max-width: 320px; width: 100%; }
+  .tx-wide { width: 100%; }
   .tx-hidden-select { display: none; }
-  .tx-select { font-size: 1em; }
-  .tx-suffix { margin-left: 0.5em; }
-  .tx-note { margin-left: 0.75em; }
+  .tx-readonly {
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    padding: 0.55rem 0.75rem;
+    background: #fff;
+  }
+  .tx-card {
+    background: #d0d0d4;
+    border-radius: 24px;
+    padding: 1rem 1.2rem;
+    align-self: start;
+  }
+  .tx-card + .tx-card { margin-top: 1rem; }
+  .tx-card-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.8rem;
+    margin-bottom: 0.45rem;
+    font-size: 1.15rem;
+  }
+  .tx-card-row:last-child { margin-bottom: 0; }
+  .tx-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.9rem;
+  }
+  .tx-actions .button {
+    font-size: 1.05rem;
+    padding: 0.8rem 1rem;
+    border-radius: 12px;
+  }
+  .tx-actions .button.cancel { background: #6adfd5; color: #000; }
+  .tx-home.button {
+    min-width: 180px;
+    text-align: center;
+    border-radius: 12px;
+  }
+  .tx-muted { color: #444; }
+  @media (max-width: 1050px) {
+    .tx-body { grid-template-columns: 1fr; }
+    .tx-actions { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 760px) {
+    .tx-context { grid-template-columns: 1fr; }
+    .tx-row { grid-template-columns: 1fr; }
+    .tx-actions { grid-template-columns: 1fr; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<h2>Nieuwe transactie</h2>
 <form method="post" id="tx-form">
   <button type="submit" id="tx-refresh-submit" hidden formnovalidate aria-hidden="true" tabindex="-1"></button>
   <input type="hidden" name="client_id" value="{{ selected_client_id }}">
@@ -304,137 +383,129 @@ document.addEventListener("DOMContentLoaded", function () {
   <input type="hidden" name="actor_id" value="{{ actor_id or '' }}">
   <input type="hidden" name="actor_role" value="{{ actor_role or '' }}">
   <input type="hidden" name="actor_channel" value="{{ actor_channel or 'web' }}">
+  <div class="tx-layout">
+    <div class="tx-header">
+      <h2 class="tx-title">Transactie</h2>
+      <a class="tx-home button" href="/{{ nav_query or '' }}">Naar Home</a>
+    </div>
 
-  <div class="form-row">
-    <label>Orderstatus</label>
-    <span>{{ order_status or 'Nieuw' }}{% if order_draft_id %} ({{ order_draft_id }}){% endif %}</span>
-  </div>
+    <div class="tx-context">
+      <div class="tx-context-row"><strong>Portefeuille:</strong><span>{{ selected_portfolio.name if selected_portfolio else '-' }}{% if selected_portfolio %} ({{ selected_portfolio.portfolio_id }}){% endif %}</span></div>
+      <div class="tx-context-row"><strong>Orderstatus:</strong><span>{{ order_status or 'Nieuw' }}{% if order_draft_id %} ({{ order_draft_id }}){% endif %}</span></div>
+      <div class="tx-context-row"><strong>Eigenaar:</strong><span>{{ selected_client.name if selected_client else '-' }}</span></div>
+      <div class="tx-context-row"><strong>Datum:</strong><span>{{ transaction_date_display }}</span></div>
+    </div>
 
-  <div class="form-row">
-    <label>Order actor</label>
-    <span>
-      {% if actor_id %}{{ actor_id }}{% else %}onbekend{% endif %}
-      {% if actor_role %} - {{ actor_role }}{% endif %}
-      ({{ actor_channel or 'web' }})
-    </span>
-  </div>
+    <div class="tx-body">
+      <div class="tx-left">
+        <div class="tx-row">
+          <label for="template">Transactiesoort:</label>
+          <select name="template" id="template" required class="tx-short">
+            {% for t in templates %}
+            <option value="{{ t.name }}" {% if t.name == selected_template %}selected{% endif %}>{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-  <div class="form-row">
-    <label>Klant</label>
-    <span>{{ selected_client.name if selected_client else '-' }}</span>
-  </div>
-  <div class="form-row">
-    <label>Portefeuille</label>
-    <span>{{ selected_portfolio.name if selected_portfolio else '-' }}</span>
-  </div>
+        <div class="tx-row">
+          <label for="order_type">Ordertype:</label>
+          <select name="order_type" id="order_type" required class="tx-short">
+            <option value="MARKET" {% if selected_order_type == 'MARKET' %}selected{% endif %}>MARKET</option>
+            <option value="LIMIT" {% if selected_order_type == 'LIMIT' %}selected{% endif %}>LIMIT</option>
+          </select>
+        </div>
 
-  <div class="form-row">
-    <label for="template">Transactiesoort</label>
-    <select name="template" id="template" required class="tx-short tx-select">
-      {% for t in templates %}
-      <option value="{{ t.name }}" {% if t.name == selected_template %}selected{% endif %}>{{ t.name }}</option>
-      {% endfor %}
-    </select>
-  </div>
+        <div class="tx-row">
+          <label for="transaction_date">Transactiedatum:</label>
+          <input type="date" name="transaction_date" id="transaction_date" value="{{ transaction_date }}" required class="tx-short" {% if not tx_date_edit_enabled %}readonly{% endif %}>
+        </div>
 
-  <div class="form-row">
-    <label for="order_type">Ordertype</label>
-    <select name="order_type" id="order_type" required class="tx-short tx-select">
-      <option value="MARKET" {% if selected_order_type == 'MARKET' %}selected{% endif %}>MARKET (Bestens)</option>
-      <option value="LIMIT" {% if selected_order_type == 'LIMIT' %}selected{% endif %}>LIMIT</option>
-    </select>
-  </div>
+        <div class="tx-row">
+          <label>Instrument:</label>
+          {% if instrument_locked %}
+          <span class="tx-readonly">{{ selected_instrument_label or '-' }}</span>
+          <input type="hidden" name="product_id" value="{{ selected_product_id or '' }}">
+          {% else %}
+          <div>
+            <input type="text" id="instrument_input" class="tx-wide" list="instrument_suggestions" autocomplete="off" placeholder="Zoek op ISIN, naam of ID" value="{{ selected_instrument_label or '' }}">
+            <datalist id="instrument_suggestions"></datalist>
+            <select name="product_id" id="product_id" required class="tx-wide tx-hidden-select">
+              <option value="" {% if not selected_product_id %}selected{% endif %}>Selecteer instrument</option>
+              {% for item in instrument_choices %}
+              <option value="{{ item.id }}" data-search="{{ item.search_text }}" {% if item.id == selected_product_id %}selected{% endif %}>{{ item.label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          {% endif %}
+        </div>
 
-  <div class="form-row">
-    <label for="transaction_date">Transactiedatum</label>
-    <input type="date" name="transaction_date" id="transaction_date" value="{{ transaction_date }}" required class="tx-short" {% if not tx_date_edit_enabled %}readonly{% endif %}>
-  </div>
+        <div class="tx-row">
+          <label for="amount">{{ amount_label }}:</label>
+          <div class="tx-field-inline">
+            <input type="text" name="amount" id="amount" value="{{ amount or '' }}" required class="tx-short" placeholder="Bijv. 1000 of 1000,50">
+            {% if amount_suffix %}<span>{{ amount_suffix }}</span>{% endif %}
+          </div>
+        </div>
 
-  <div class="form-row">
-    <label>Instrument</label>
-    {% if instrument_locked %}
-    <span>{{ selected_instrument_label or '-' }}</span>
-    <input type="hidden" name="product_id" value="{{ selected_product_id or '' }}">
-    {% else %}
-    <input type="text" id="instrument_input" class="tx-wide" list="instrument_suggestions" autocomplete="off" placeholder="Zoek op ISIN, naam of ID" value="{{ selected_instrument_label or '' }}">
-    <datalist id="instrument_suggestions"></datalist>
-    <select name="product_id" id="product_id" required class="tx-wide tx-select tx-hidden-select">
-      <option value="" {% if not selected_product_id %}selected{% endif %}>Selecteer instrument</option>
-      {% for item in instrument_choices %}
-      <option value="{{ item.id }}" data-search="{{ item.search_text }}" {% if item.id == selected_product_id %}selected{% endif %}>{{ item.label }}</option>
-      {% endfor %}
-    </select>
-    {% endif %}
-  </div>
+        {% if show_price_input %}
+        <div class="tx-row">
+          <label for="price">Limietprijs:</label>
+          <div class="tx-field-inline">
+            <input type="text" name="price" id="price" value="{{ price or '' }}" required class="tx-short" placeholder="Bijv. 100,23">
+            {% if limit_suffix %}<span>{{ limit_suffix }}</span>{% endif %}
+          </div>
+        </div>
+        <div class="tx-row">
+          <label for="validity_date">Validity date:</label>
+          <input type="date" name="validity_date" id="validity_date" value="{{ validity_date or '' }}" class="tx-short">
+        </div>
+        {% else %}
+        <input type="hidden" name="price" id="price" value="{{ price or '' }}">
+        <input type="hidden" name="validity_date" id="validity_date" value="{{ validity_date or '' }}">
+        {% endif %}
 
-  <div class="form-row">
-    <label for="amount">{{ amount_label }}</label>
-    <input type="text" name="amount" id="amount" value="{{ amount or '' }}" required class="tx-short" placeholder="Bijv. 1000 of 1000,50">
-    {% if amount_suffix %}<span class="tx-suffix">{{ amount_suffix }}</span>{% endif %}
-  </div>
+        <div class="tx-row">
+          <label for="settlement_currency">Afrekenen op</label>
+          <div class="tx-field-inline">
+            <select name="settlement_currency" id="settlement_currency" required {% if settlement_locked %}disabled{% endif %} class="tx-short">
+              {% for opt in settlement_options %}
+              <option value="{{ opt.currency }}" {% if opt.currency == selected_settlement_currency %}selected{% endif %}>{{ opt.currency }}</option>
+              {% endfor %}
+            </select>
+            {% if settlement_locked %}
+            <input type="hidden" name="settlement_currency" value="{{ selected_settlement_currency }}">
+            <span class="tx-muted">Vast op portefeuillevaluta.</span>
+            {% endif %}
+            <span class="tx-muted">Saldo: {% if selected_settlement_balance is not none and selected_settlement_currency %}{{ format_currency(selected_settlement_balance, selected_settlement_currency) }}{% else %}-{% endif %}</span>
+          </div>
+        </div>
+      </div>
 
-  <div class="form-row">
-    <label>Orderregels</label>
-    <span>Handelseenheid: {{ amount_unit_display }} | Minimale ordergrootte: {{ minimum_order_size_display }}</span>
-  </div>
+      <div>
+        <div class="tx-card">
+          <div class="tx-card-row"><span>Positie:</span><strong>{{ position_display }}</strong></div>
+          <div class="tx-card-row"><span>Handelseenheid:</span><strong>{{ amount_unit_display }}{% if amount_suffix %} {{ amount_suffix }}{% endif %}</strong></div>
+          <div class="tx-card-row"><span>Min. order:</span><strong>{{ minimum_order_size_display }}{% if amount_suffix %} {{ amount_suffix }}{% endif %}</strong></div>
+          <div class="tx-card-row"><span>Actuele koers:</span><strong>{% if current_market_price is not none %}{{ current_market_price }}{% if current_product_kind == 'bond' %}%{% endif %}{% else %}-{% endif %}</strong></div>
+          <div class="tx-card-row"><span>Koersdatum:</span><strong>{% if current_market_price_date %}{{ current_market_price_date.strftime('%d-%m-%Y') }}{% else %}-{% endif %}</strong></div>
+        </div>
 
-  {% if show_price_input %}
-  <div class="form-row">
-    <label for="price">Limiet</label>
-    <input type="text" name="price" id="price" value="{{ price or '' }}" required class="tx-short" placeholder="Bijv. 100,23">
-    {% if limit_suffix %}<span class="tx-suffix">{{ limit_suffix }}</span>{% endif %}
-  </div>
-  {% else %}
-  <div class="form-row">
-    <label>Actuele koers</label>
-    <span>
-      {% if used_price is not none %}
-        {{ used_price }}{% if used_price_date %} ({{ used_price_date.isoformat() }}){% endif %}
-      {% else %}
-        -
-      {% endif %}
-    </span>
-    <input type="hidden" name="price" id="price" value="{{ price or '' }}">
-  </div>
-  {% endif %}
+        <div class="tx-card">
+          <div class="tx-card-row"><span>Transactiekosten:</span><strong>{% if estimated_cost is not none and selected_settlement_currency %}{{ format_currency(estimated_cost, selected_settlement_currency) }}{% else %}-{% endif %}</strong></div>
+          {% if current_product_kind == 'bond' %}
+          <div class="tx-card-row"><span>Opgelopen rente:</span><strong>{% if estimated_accrued is not none and selected_settlement_currency %}{{ format_currency(estimated_accrued, selected_settlement_currency) }}{% else %}-{% endif %}</strong></div>
+          {% endif %}
+          <div class="tx-card-row"><span>Orderbedrag:</span><strong>{% if estimated_total is not none and selected_settlement_currency %}{{ format_currency(estimated_total, selected_settlement_currency) }}{% else %}-{% endif %}</strong></div>
+        </div>
+      </div>
+    </div>
 
-  <div class="form-row">
-    <label for="settlement_currency">Afrekenrekening</label>
-    <select name="settlement_currency" id="settlement_currency" required {% if settlement_locked %}disabled{% endif %} class="tx-medium tx-select">
-      {% for opt in settlement_options %}
-      <option value="{{ opt.currency }}" {% if opt.currency == selected_settlement_currency %}selected{% endif %}>
-        {{ opt.currency }} (Saldo: {{ format_currency(opt.balance, opt.currency) }})
-      </option>
-      {% endfor %}
-    </select>
-    {% if settlement_locked %}
-    <input type="hidden" name="settlement_currency" value="{{ selected_settlement_currency }}">
-    <span class="tx-note">Vast op portefeuillevaluta.</span>
-    {% endif %}
-  </div>
-
-  <div class="form-row">
-    <label>Transactiekosten</label>
-    <span>{% if estimated_cost is not none and selected_settlement_currency %}{{ format_currency(estimated_cost, selected_settlement_currency) }}{% else %}-{% endif %}</span>
-  </div>
-
-  {% if current_product_kind == 'bond' %}
-  <div class="form-row">
-    <label>Opgelopen rente</label>
-    <span>{% if estimated_accrued is not none and selected_settlement_currency %}{{ format_currency(estimated_accrued, selected_settlement_currency) }}{% else %}-{% endif %}</span>
-  </div>
-  {% endif %}
-
-  <div class="form-row">
-    <label>Totaalbedrag</label>
-    <span>{% if estimated_total is not none and selected_settlement_currency %}{{ format_currency(estimated_total, selected_settlement_currency) }}{% else %}-{% endif %}</span>
-  </div>
-
-  <div class="form-actions">
-    <button class="button" type="submit" name="action" value="draft">Concept opslaan</button>
-    <button class="button" type="submit" name="action" value="confirm">Valideren en bevestigen</button>
-    <button class="button" type="submit" name="action" value="submit">Definitief boeken</button>
-    <button class="button cancel" type="submit" name="action" value="cancel">Annuleren</button>
+    <div class="tx-actions">
+      <button class="button" type="submit" name="action" value="draft">Concept opslaan</button>
+      <button class="button" type="submit" name="action" value="confirm">Valideren</button>
+      <button class="button" type="submit" name="action" value="submit">Routeren</button>
+      <button class="button cancel" type="submit" name="action" value="cancel">Annuleren</button>
+    </div>
   </div>
 </form>
 
