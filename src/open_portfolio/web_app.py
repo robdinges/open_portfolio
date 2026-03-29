@@ -73,6 +73,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         clients = client if isinstance(client, list) else [client]
 
     app = Flask(__name__)
+    tx_date_edit_enabled = os.getenv("OPEN_PORTFOLIO_ENABLE_TX_DATE_EDIT", "0").strip().lower() in {"1", "true", "yes", "on"}
     tx_manager = TransactionManager()
     if order_database is None:
         if os.getenv("PYTEST_CURRENT_TEST"):
@@ -286,6 +287,17 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             "isin": getattr(product, "isin", ""),
         }
 
+    def compact_number(value: float) -> str:
+        if abs(value - round(value)) < 1e-9:
+            return str(int(round(value)))
+        return f"{value:.6f}".rstrip("0").rstrip(".")
+
+    def format_position_for_product(product: Product, raw_amount: float) -> str:
+        amount_text = compact_number(float(raw_amount))
+        if product.is_bond():
+            return f"{amount_text} {product.issue_currency}"
+        return amount_text
+
     @app.route("/holdings")
     def holdings_page():
         selected_client_id = request.args.get("client_id", type=int)
@@ -440,11 +452,16 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             quotient = value / unit
             return abs(round(quotient) - quotient) <= 1e-9
 
-        def get_latest_price_for_date(product, tx_date: date) -> float:
-            price = product.get_price(tx_date)
-            if price is None:
+        def get_latest_price_for_date(product, tx_date: date) -> tuple[float, date]:
+            latest = None
+            for p_date, p_value in product.prices:
+                if p_date <= tx_date:
+                    latest = (p_date, p_value)
+                else:
+                    break
+            if latest is None:
                 raise ValueError("Geen koers beschikbaar op of voor transactiedatum")
-            return float(price)
+            return float(latest[1]), latest[0]
 
         def calculate_cost(amount: float, price: float) -> float:
             return 0.01 * amount * price
@@ -470,6 +487,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             entered_price = request.form.get("price", "")
             entered_tx_date = request.form.get("transaction_date", date.today().isoformat())
             return_to = request.form.get("return_to", "")
+            locked_product_id_raw = request.form.get("locked_product_id", "")
             order_action = request.form.get("action", "")
             order_draft_id = request.form.get("order_draft_id", "")
             actor_id = request.form.get("actor_id", "")
@@ -488,6 +506,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             entered_price = request.args.get("price", "")
             entered_tx_date = request.args.get("transaction_date", date.today().isoformat())
             return_to = request.args.get("return_to", "")
+            locked_product_id_raw = request.args.get("locked_product_id", "")
             order_action = ""
             order_draft_id = request.args.get("order_draft_id", "")
             actor_id = request.args.get("actor_id", "")
@@ -499,6 +518,19 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 selected_product_id = int(selected_product_id)
             except Exception:
                 selected_product_id = None
+
+        locked_product_id = None
+        if locked_product_id_raw:
+            try:
+                locked_product_id = int(locked_product_id_raw)
+            except Exception:
+                locked_product_id = None
+
+        instrument_locked = return_to == "holdings" and (locked_product_id is not None or selected_product_id is not None)
+        if instrument_locked and locked_product_id is None:
+            locked_product_id = selected_product_id
+        if instrument_locked and locked_product_id is not None:
+            selected_product_id = locked_product_id
 
         if request.method == "GET" and order_draft_id:
             existing_draft = order_repo.get_draft(order_draft_id)
@@ -531,12 +563,19 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             except Exception:
                 selected_product_id = None
 
-        # Keep backend state aligned with the first visible instrument so
-        # settlement account options are always determinable.
-        if selected_product_id is None and product_collection.products:
-            selected_product_id = sorted(product_collection.products.keys())[0]
+        active_products = sorted(
+            product_collection.list_products(include_inactive=False, on_date=date.today()),
+            key=lambda p: p.description.lower(),
+        )
+        active_product_ids = {product.instrument_id for product in active_products}
 
-        product = product_collection.search_product_id(selected_product_id) if selected_product_id else None
+        selected_product = product_collection.search_product_id(selected_product_id) if selected_product_id else None
+        selected_product_is_active = selected_product.instrument_id in active_product_ids if selected_product else False
+        inactive_selected_product = selected_product if selected_product and not selected_product_is_active else None
+        if selected_product_id is not None and not selected_product_is_active and not instrument_locked:
+            selected_product_id = None
+        product = selected_product if selected_product_is_active else None
+
         position_by_product = get_position_map(selected_portfolio)
         current_position = position_by_product.get(selected_product_id, 0.0) if selected_product_id else 0.0
 
@@ -568,6 +607,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         estimated_accrued = None
         estimated_total = None
         used_price = None
+        used_price_date = None
         order_status = "Nieuw"
         order_warnings = []
         order_placeholder_messages = placeholder_messages()
@@ -575,6 +615,8 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         def validate_and_calculate_order():
             if selected_portfolio is None:
                 raise ValueError("Geen portefeuille geselecteerd")
+            if inactive_selected_product is not None:
+                raise ValueError("Instrument is inactief en kan niet verhandeld worden")
             if product is None:
                 raise ValueError("Instrument niet gevonden")
             if selected_template not in {"BUY", "SELL"}:
@@ -600,8 +642,9 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 displayed_price_local = parse_decimal(entered_price, "Limiet")
                 if displayed_price_local <= 0:
                     raise ValueError("Limiet moet groter zijn dan 0")
+                displayed_price_date_local = None
             else:
-                displayed_price_local = get_latest_price_for_date(product, tx_date_local)
+                displayed_price_local, displayed_price_date_local = get_latest_price_for_date(product, tx_date_local)
 
             execution_price_local = to_execution_price(product, displayed_price_local)
 
@@ -645,6 +688,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             return {
                 "payload": payload_local,
                 "display_price": displayed_price_local,
+                "display_price_date": displayed_price_date_local,
                 "trade": trade_amount_local,
                 "cost": cost_local,
                 "accrued": accrued_local,
@@ -665,6 +709,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 try:
                     result = validate_and_calculate_order()
                     used_price = result["display_price"]
+                    used_price_date = result["display_price_date"]
                     estimated_trade = result["trade"]
                     estimated_cost = result["cost"]
                     estimated_accrued = result["accrued"]
@@ -752,10 +797,11 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                     amount_preview = parse_optional_decimal(entered_amount)
                     if amount_preview and amount_preview > 0:
                         if selected_order_type == "MARKET":
-                            used_price = get_latest_price_for_date(product, tx_date_preview)
+                            used_price, used_price_date = get_latest_price_for_date(product, tx_date_preview)
                         else:
                             limit_preview = parse_optional_decimal(entered_price)
                             used_price = limit_preview if limit_preview is not None else None
+                            used_price_date = None
 
                         if used_price is not None and used_price > 0:
                             execution_price = to_execution_price(product, used_price)
@@ -775,12 +821,28 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 # Preview should never block rendering.
                 pass
 
-        products_by_type = {"bond": [], "stock": [], "option": [], "fund": [], "other": []}
-        for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
-            kind = product_kind(prod)
-            if kind not in products_by_type:
-                kind = "other"
-            products_by_type[kind].append((pid, prod))
+        instrument_choices = []
+        for prod in active_products:
+            pos = position_by_product.get(prod.instrument_id, 0.0)
+            pos_text = format_position_for_product(prod, pos)
+            isin_text = getattr(prod, "isin", "") or "-"
+            label = f"[{product_kind(prod).upper()}] {prod.description} | ID: {prod.instrument_id} | ISIN: {isin_text} | Positie: {pos_text}"
+            search_text = f"{prod.instrument_id} {prod.description} {isin_text}".lower()
+            instrument_choices.append(
+                {
+                    "id": prod.instrument_id,
+                    "label": label,
+                    "search_text": search_text,
+                }
+            )
+
+        selected_instrument_label = None
+        if selected_product_id is not None:
+            matched_choice = next((item for item in instrument_choices if item["id"] == selected_product_id), None)
+            if matched_choice is not None:
+                selected_instrument_label = matched_choice["label"]
+            elif selected_product is not None:
+                selected_instrument_label = f"[{product_kind(selected_product).upper()}] {selected_product.description} | ID: {selected_product.instrument_id}"
 
         return render_template(
             "transaction_form.html",
@@ -789,7 +851,10 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             selected_portfolio=selected_portfolio,
             templates=[TransactionTemplate.BUY, TransactionTemplate.SELL],
             products=product_collection.products,
-            products_by_type=products_by_type,
+            instrument_choices=instrument_choices,
+            instrument_locked=instrument_locked,
+            selected_instrument_label=selected_instrument_label,
+            locked_product_id=locked_product_id,
             selected_client_id=selected_client_id,
             selected_portfolio_id=selected_portfolio_id,
             selected_template=selected_template,
@@ -812,10 +877,12 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             limit_suffix=limit_suffix,
             current_product_kind=current_product_kind,
             used_price=used_price,
+            used_price_date=used_price_date,
             estimated_trade=estimated_trade,
             estimated_cost=estimated_cost,
             estimated_accrued=estimated_accrued,
             estimated_total=estimated_total,
+            tx_date_edit_enabled=tx_date_edit_enabled,
             order_draft_id=order_draft_id,
             order_status=order_status,
             order_warnings=order_warnings,
@@ -902,6 +969,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         selected_client, selected_portfolio = resolve_context(selected_client_id, selected_portfolio_id)
         instrument_message = request.args.get("message")
         instrument_error = request.args.get("error")
+        show_inactive = request.args.get("show_inactive", "0").strip().lower() in {"1", "true", "yes", "on"}
 
         if request.method == "POST":
             action = (request.form.get("action") or "").strip().lower()
@@ -926,7 +994,12 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 instrument_error = str(exc)
 
         instruments = []
-        for pid, prod in sorted(product_collection.products.items(), key=lambda item: item[1].description.lower()):
+        filtered_products = sorted(
+            product_collection.list_products(include_inactive=show_inactive, on_date=date.today()),
+            key=lambda item: item.description.lower(),
+        )
+        for prod in filtered_products:
+            pid = prod.instrument_id
             row = {
                 "instrument_id": pid,
                 "isin": getattr(prod, "isin", ""),
@@ -934,6 +1007,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
                 "description": prod.description,
                 "instrument_type": getattr(getattr(prod, "type", None), "name", "STOCK"),
                 "issue_currency": prod.issue_currency,
+                "is_active": prod.is_active(on_date=date.today()),
                 "minimum_purchase_value": getattr(prod, "minimum_purchase_value", 0),
                 "smallest_trading_unit": getattr(prod, "smallest_trading_unit", 0),
                 "start_date": getattr(prod, "start_date", None),
@@ -949,6 +1023,7 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
             instruments=instruments,
             instrument_types=["BOND", "STOCK"],
             payment_frequencies=[f.name for f in PaymentFrequency],
+            show_inactive=show_inactive,
             instrument_message=instrument_message,
             instrument_error=instrument_error,
             selected_client=selected_client,

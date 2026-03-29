@@ -48,6 +48,10 @@ class Product:
     def is_bond(self) -> bool:
         return self.type == InstrumentType.BOND
 
+    def is_active(self, on_date: date | None = None) -> bool:
+        del on_date
+        return True
+
     def to_dict(self) -> Dict:
         return {
             "instrument_id": self.instrument_id,
@@ -117,6 +121,10 @@ class Bond(Product):
                 return True
             d += timedelta(days=1)
         return False
+
+    def is_active(self, on_date: date | None = None) -> bool:
+        ref_date = on_date or date.today()
+        return self.maturity_date >= ref_date
 
 
 class Stock(Product):
