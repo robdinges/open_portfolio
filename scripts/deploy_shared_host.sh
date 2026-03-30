@@ -19,7 +19,7 @@ curl -fsS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
 fi
 
 .venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install Flask gunicorn
 
 # Shared-hosting style app restart (Passenger-compatible)
 if [[ -n "$RESTART_TOUCH_FILE" ]]; then
