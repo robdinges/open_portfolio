@@ -61,14 +61,76 @@ class TestActActAccruedInterest:
         expected = 100_000 * 0.03 * 90 / 365
         assert result == pytest.approx(expected, rel=1e-9)
 
-    def test_full_year_leap(self, sample_bond: Bond):
-        """Full year 2024 (leap): 366 days."""
+    def test_coupon_date_resets_accrual_for_year_frequency(self, sample_bond: Bond):
+        """At the next coupon date accrued interest should reset to zero."""
         result = sample_bond.calculate_accrued_interest(
             nominal_value=100_000,
             valuation_date=date(2025, 1, 1),
             interest_type=InterestType.ACT_ACT,
         )
-        expected = 100_000 * 0.05 * 366 / 366
+        expected = 0.0
+        assert result == pytest.approx(expected, rel=1e-9)
+
+    def test_year_frequency_uses_previous_coupon_date(self):
+        bond = Bond(
+            instrument_id=10,
+            description="Yearly coupon bond",
+            minimum_purchase_value=1000.0,
+            smallest_trading_unit=1.0,
+            issue_currency="EUR",
+            start_date=date(2020, 1, 1),
+            maturity_date=date(2030, 1, 1),
+            interest_rate=0.025,
+            interest_payment_frequency=PaymentFrequency.YEAR,
+        )
+        result = bond.calculate_accrued_interest(
+            nominal_value=1000,
+            valuation_date=date(2026, 3, 30),
+            interest_type=InterestType.ACT_ACT,
+        )
+        # 2026-01-01 -> 2026-03-30 = 88 days, denominator 365.
+        expected = 1000 * 0.025 * 88 / 365
+        assert result == pytest.approx(expected, rel=1e-9)
+
+    def test_month_frequency_uses_previous_month_coupon_date(self):
+        bond = Bond(
+            instrument_id=11,
+            description="Monthly coupon bond",
+            minimum_purchase_value=1000.0,
+            smallest_trading_unit=1.0,
+            issue_currency="EUR",
+            start_date=date(2026, 1, 31),
+            maturity_date=date(2028, 1, 31),
+            interest_rate=0.12,
+            interest_payment_frequency=PaymentFrequency.MONTH,
+        )
+        result = bond.calculate_accrued_interest(
+            nominal_value=1200,
+            valuation_date=date(2026, 3, 30),
+            interest_type=InterestType.ACT_ACT,
+        )
+        # Coupon dates: 31-01 -> 28-02 -> 28-03, so accrued starts at 28-03.
+        expected = 1200 * 0.12 * 2 / 365
+        assert result == pytest.approx(expected, rel=1e-9)
+
+    def test_end_date_frequency_accrues_from_start_date(self):
+        bond = Bond(
+            instrument_id=12,
+            description="End-date coupon bond",
+            minimum_purchase_value=1000.0,
+            smallest_trading_unit=1.0,
+            issue_currency="EUR",
+            start_date=date(2020, 1, 1),
+            maturity_date=date(2030, 1, 1),
+            interest_rate=0.025,
+            interest_payment_frequency=PaymentFrequency.END_DATE,
+        )
+        result = bond.calculate_accrued_interest(
+            nominal_value=1000,
+            valuation_date=date(2026, 3, 30),
+            interest_type=InterestType.ACT_ACT,
+        )
+        expected = 1000 * 0.025 * 2280 / 366
         assert result == pytest.approx(expected, rel=1e-9)
 
     def test_default_interest_type_is_act_act(self, sample_bond: Bond):
@@ -100,13 +162,13 @@ class TestThirty360AccruedInterest:
         assert result == pytest.approx(expected, rel=1e-9)
 
     def test_cross_year_period(self, sample_bond: Bond):
-        """Jan 1 2024 -> Jan 1 2025 = 360 days in 30/360."""
+        """At annual coupon date accrued should reset to zero (also for 30/360)."""
         result = sample_bond.calculate_accrued_interest(
             nominal_value=100_000,
             valuation_date=date(2025, 1, 1),
             interest_type=InterestType.THIRTY_360,
         )
-        expected = 100_000 * 0.05 * 360 / 360
+        expected = 0.0
         assert result == pytest.approx(expected, rel=1e-9)
 
     def test_mid_month(self, sample_bond: Bond):

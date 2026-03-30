@@ -302,10 +302,10 @@ def _base_order_kwargs(product=None, portfolio=None, currency_prices=None):
 class TestValidateAndCalculateOrder:
     def test_basic_buy_stock(self):
         result = validate_and_calculate_order(**_base_order_kwargs())
-        assert result["trade"] == pytest.approx(10 * 50.0)
-        assert result["cost"] == pytest.approx(FEE_RATE * 10 * 50.0)
+        assert result["trade"] == pytest.approx(-(10 * 50.0))
+        assert result["cost"] == pytest.approx(-(FEE_RATE * 10 * 50.0))
         assert result["accrued"] == 0.0
-        assert result["total"] == pytest.approx(10 * 50.0 + FEE_RATE * 10 * 50.0)
+        assert result["total"] == pytest.approx(-(10 * 50.0 + FEE_RATE * 10 * 50.0))
 
     def test_no_portfolio_raises(self):
         kwargs = _base_order_kwargs()
@@ -359,6 +359,7 @@ class TestValidateAndCalculateOrder:
         result = validate_and_calculate_order(**kwargs)
         assert result["trade"] == pytest.approx(5 * 50.0)
         expected_cost = FEE_RATE * 5 * 50.0
+        assert result["cost"] == pytest.approx(-expected_cost)
         assert result["total"] == pytest.approx(5 * 50.0 - expected_cost)
 
     def test_not_multiple_of_unit_raises(self):
@@ -391,7 +392,7 @@ class TestValidateAndCalculateOrder:
         result = validate_and_calculate_order(**kwargs)
         assert result["display_price"] == 55.0
         assert result["display_price_date"] is None
-        assert result["trade"] == pytest.approx(10 * 55.0)
+        assert result["trade"] == pytest.approx(-(10 * 55.0))
 
     def test_limit_zero_price_raises(self):
         kwargs = _base_order_kwargs()
@@ -430,10 +431,10 @@ class TestValidateAndCalculateOrder:
         exec_price = 101.0 / 100.0
         expected_trade = 10000 * exec_price
         expected_cost = FEE_RATE * 10000 * exec_price
-        assert result["trade"] == pytest.approx(expected_trade)
-        assert result["cost"] == pytest.approx(expected_cost)
+        assert result["trade"] == pytest.approx(-expected_trade)
+        assert result["cost"] == pytest.approx(-expected_cost)
         assert result["accrued"] == pytest.approx(-250.0)
-        assert result["total"] == pytest.approx(expected_trade + expected_cost + 250.0)
+        assert result["total"] == pytest.approx(-(expected_trade + expected_cost + 250.0))
 
     def test_bond_accrued_interest_sell(self):
         product = make_product(
@@ -455,6 +456,8 @@ class TestValidateAndCalculateOrder:
         exec_price = 101.0 / 100.0
         expected_trade = 10000 * exec_price
         expected_cost = FEE_RATE * 10000 * exec_price
+        assert result["trade"] == pytest.approx(expected_trade)
+        assert result["cost"] == pytest.approx(-expected_cost)
         assert result["accrued"] == pytest.approx(250.0)
         assert result["total"] == pytest.approx(expected_trade - expected_cost + 250.0)
 

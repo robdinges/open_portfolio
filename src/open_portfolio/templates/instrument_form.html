@@ -45,97 +45,152 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 </script>
+<style>
+  .instrument-shell {
+    max-width: 980px;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .instrument-title {
+    margin: 0;
+    font-size: clamp(1.8rem, 2.3vw, 2.4rem);
+  }
+  .instrument-card {
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid #d7e1eb;
+    border-radius: 22px;
+    padding: 1.3rem 1.35rem;
+    box-shadow: 0 10px 22px rgba(35, 56, 84, 0.06);
+  }
+  .instrument-grid {
+    display: grid;
+    gap: 1rem;
+  }
+  .instrument-grid .form-row {
+    margin-bottom: 0;
+    grid-template-columns: minmax(155px, 220px) minmax(0, 1fr);
+  }
+  .instrument-grid input,
+  .instrument-grid select {
+    max-width: 28rem;
+  }
+  .field-id { max-width: 8rem !important; }
+  .field-isin { max-width: 15rem !important; }
+  .field-description { max-width: 30rem !important; }
+  .field-currency { max-width: 7rem !important; }
+  .field-amount { max-width: 11rem !important; }
+  .field-date { max-width: 12rem !important; }
+  .field-frequency { max-width: 12rem !important; }
+  .instrument-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    margin-top: 0.5rem;
+  }
+  .instrument-actions .button {
+    min-width: 9rem;
+    max-width: 12rem;
+  }
+  @media (max-width: 760px) {
+    .instrument-grid .form-row { grid-template-columns: 1fr; }
+    .instrument-grid input,
+    .instrument-grid select,
+    .instrument-actions .button { max-width: none !important; width: 100%; }
+  }
+</style>
 {% endblock %}
 {% block content %}
-<h2>{{ form_title }}</h2>
+<section class="instrument-shell">
+<h2 class="instrument-title">{{ form_title }}</h2>
 
 {% if instrument_error %}<div class="error">{{ instrument_error }}</div>{% endif %}
 
 {% if choose_type_mode %}
-<form method="get" id="type-select-form">
+<form method="get" id="type-select-form" class="instrument-card">
   <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
   <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
   <div class="form-row">
     <label for="instrument_type">Type</label>
-    <select id="instrument_type" name="instrument_type" required>
+    <select id="instrument_type" name="instrument_type" required class="field-frequency">
       <option value="">Kies type</option>
       <option value="STOCK">Aandeel</option>
       <option value="BOND">Obligatie</option>
     </select>
   </div>
-  <div class="form-actions">
+  <div class="instrument-actions">
     <button class="button" type="submit">Volgende</button>
     <a class="button cancel cancel-button" href="/instruments">Annuleren</a>
   </div>
 </form>
 {% else %}
-<form method="post" id="instrument-form">
+<form method="post" id="instrument-form" class="instrument-card instrument-grid">
   <input type="hidden" name="client_id" value="{{ selected_client_id if selected_client_id else '' }}">
   <input type="hidden" name="portfolio_id" value="{{ selected_portfolio_id if selected_portfolio_id else '' }}">
   <input type="hidden" name="action" value="{{ action }}">
 
   <div class="form-row">
     <label for="instrument_id">Instrument ID</label>
-    <input id="instrument_id" name="instrument_id" value="{{ instrument.instrument_id or '' }}" {% if action == 'add' %}required{% else %}readonly{% endif %}>
+    <input class="field-id" id="instrument_id" name="instrument_id" value="{{ instrument.instrument_id or '' }}" {% if action == 'add' %}required{% else %}readonly{% endif %}>
   </div>
   <div class="form-row">
     <label for="isin">ISIN</label>
-    <input id="isin" name="isin" value="{{ instrument.isin or '' }}">
+    <input class="field-isin" id="isin" name="isin" value="{{ instrument.isin or '' }}">
   </div>
   <div class="form-row">
     <label for="description">Omschrijving</label>
-    <input id="description" name="description" value="{{ instrument.description or '' }}" required>
+    <input class="field-description" id="description" name="description" value="{{ instrument.description or '' }}" required>
   </div>
   <div class="form-row">
     <label for="instrument_type">Type</label>
-    <select id="instrument_type" name="instrument_type" required {% if action != 'add' %}disabled{% endif %}>
+    <select class="field-frequency" id="instrument_type" name="instrument_type" required {% if action != 'add' %}disabled{% endif %}>
       {% for t in instrument_types %}<option value="{{ t }}" {% if t == instrument.instrument_type %}selected{% endif %}>{{ t }}</option>{% endfor %}
     </select>
     {% if action != 'add' %}<input type="hidden" name="instrument_type" value="{{ instrument.instrument_type }}">{% endif %}
   </div>
   <div class="form-row">
     <label for="issue_currency">Valuta</label>
-    <input id="issue_currency" name="issue_currency" value="{{ instrument.issue_currency or 'EUR' }}" required>
+    <input class="field-currency" id="issue_currency" name="issue_currency" value="{{ instrument.issue_currency or 'EUR' }}" required>
   </div>
   <div class="form-row">
     <label for="minimum_purchase_value">Minimale ordergrootte</label>
-    <input id="minimum_purchase_value" name="minimum_purchase_value" value="{{ instrument.minimum_purchase_value or 1 }}" required>
+    <input class="field-amount" id="minimum_purchase_value" name="minimum_purchase_value" value="{{ instrument.minimum_purchase_value or 1 }}" required>
   </div>
   <div class="form-row">
     <label for="smallest_trading_unit">Handelseenheid</label>
-    <input id="smallest_trading_unit" name="smallest_trading_unit" value="{{ instrument.smallest_trading_unit or 1 }}" required>
+    <input class="field-amount" id="smallest_trading_unit" name="smallest_trading_unit" value="{{ instrument.smallest_trading_unit or 1 }}" required>
   </div>
 
   <div class="form-row bond-only">
     <label for="issuer">Issuer</label>
-    <input id="issuer" name="issuer" value="{{ instrument.issuer or '' }}">
+    <input class="field-description" id="issuer" name="issuer" value="{{ instrument.issuer or '' }}">
   </div>
   <div class="form-row bond-only">
     <label for="maturity_date">Einddatum</label>
-    <input id="maturity_date" type="date" name="maturity_date" value="{{ instrument.maturity_date|default('', true) }}">
+    <input class="field-date" id="maturity_date" type="date" name="maturity_date" value="{{ instrument.maturity_date|default('', true) }}">
   </div>
   <div class="form-row bond-only">
     <label for="interest_rate">Couponrente (%)</label>
-    <input id="interest_rate" name="interest_rate" value="{{ instrument.interest_rate or '' }}" placeholder="Bijv. 4 voor 4%">
+    <input class="field-amount" id="interest_rate" name="interest_rate" value="{{ instrument.interest_rate or '' }}" placeholder="Bijv. 4 voor 4%">
   </div>
   <div class="form-row bond-only">
     <label for="interest_payment_frequency">Couponfrequentie</label>
-    <select id="interest_payment_frequency" name="interest_payment_frequency">
+    <select class="field-frequency" id="interest_payment_frequency" name="interest_payment_frequency">
       {% for f in payment_frequencies %}<option value="{{ f }}" {% if f == instrument.interest_payment_frequency %}selected{% endif %}>{{ f }}</option>{% endfor %}
     </select>
   </div>
   <div class="form-row bond-only">
     <label for="day_count_convention">Renteberekeningswijze</label>
-    <select id="day_count_convention" name="day_count_convention">
+    <select class="field-frequency" id="day_count_convention" name="day_count_convention">
       <option value="360/360" {% if instrument.day_count_convention == '360/360' %}selected{% endif %}>360/360</option>
       <option value="ACT/ACT" {% if instrument.day_count_convention == 'ACT/ACT' %}selected{% endif %}>ACT/ACT</option>
     </select>
   </div>
 
-  <div class="form-actions">
+  <div class="instrument-actions">
     <button class="button" type="submit">Save</button>
     <a class="button cancel cancel-button" href="/instruments">Cancel</a>
   </div>
 </form>
 {% endif %}
+</section>
 {% endblock %}

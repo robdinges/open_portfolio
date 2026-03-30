@@ -208,11 +208,17 @@ def validate_and_calculate_order(
         accrued_abs = product.calculate_accrued_interest(amount_local, tx_date_local) * exchange_rate_local
 
     if template_local == TransactionTemplate.SELL:
+        trade_display = abs(trade_amount_local) if trade_amount_local != 0.0 else 0.0
         accrued_display = abs(accrued_abs)
         total_local = trade_amount_local - cost_local + accrued_abs
+        total_display = abs(total_local) if total_local != 0.0 else 0.0
     else:
+        trade_display = -abs(trade_amount_local) if trade_amount_local != 0.0 else 0.0
         accrued_display = -abs(accrued_abs) if accrued_abs != 0.0 else 0.0
         total_local = trade_amount_local + cost_local + accrued_abs
+        total_display = -abs(total_local) if total_local != 0.0 else 0.0
+
+    cost_display = -abs(cost_local) if cost_local != 0.0 else 0.0
 
     if template_local == TransactionTemplate.BUY:
         estimated_cash_impact = trade_amount_local + cost_local + max(accrued_abs, 0)
@@ -238,8 +244,8 @@ def validate_and_calculate_order(
         "payload": payload_local,
         "display_price": displayed_price_local,
         "display_price_date": displayed_price_date_local,
-        "trade": trade_amount_local,
-        "cost": cost_local,
+        "trade": trade_display,
+        "cost": cost_display,
         "accrued": accrued_display,
-        "total": total_local,
+        "total": total_display,
     }

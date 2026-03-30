@@ -1,5 +1,6 @@
 from __future__ import annotations
 from datetime import date, timedelta
+import calendar
 from typing import List, Tuple, Dict
 import logging
 
@@ -101,16 +102,55 @@ class Bond(Product):
         else:
             return self._calculate_thirty_360(nominal_value, valuation_date)
 
+    def _previous_coupon_date(self, valuation_date: date) -> date:
+        # Keep legacy behavior for valuation dates before start date.
+        if valuation_date < self.start_date:
+            return self.start_date
+
+        if self.interest_payment_frequency == PaymentFrequency.END_DATE:
+            # Zero-coupon style behavior: accrue from start date up to maturity.
+            return self.start_date
+
+        if self.interest_payment_frequency == PaymentFrequency.MONTH:
+            coupon_date = self.start_date
+            while True:
+                next_coupon = self._add_months(coupon_date, 1)
+                if next_coupon > valuation_date:
+                    return coupon_date
+                coupon_date = next_coupon
+
+        # Default annual coupon cycle.
+        coupon_date = self.start_date
+        while True:
+            next_coupon = self._add_years(coupon_date, 1)
+            if next_coupon > valuation_date:
+                return coupon_date
+            coupon_date = next_coupon
+
+    def _add_months(self, d: date, months: int) -> date:
+        month_index = (d.month - 1) + months
+        year = d.year + month_index // 12
+        month = (month_index % 12) + 1
+        day = min(d.day, calendar.monthrange(year, month)[1])
+        return date(year, month, day)
+
+    def _add_years(self, d: date, years: int) -> date:
+        year = d.year + years
+        day = min(d.day, calendar.monthrange(year, d.month)[1])
+        return date(year, d.month, day)
+
     def _calculate_act_act(self, nominal_value: float, valuation_date: date) -> float:
-        days = (valuation_date - self.start_date).days
-        yearlen = 366 if self._contains_leap_year(self.start_date, valuation_date) else 365
+        period_start = self._previous_coupon_date(valuation_date)
+        days = (valuation_date - period_start).days
+        yearlen = 366 if self._contains_leap_year(period_start, valuation_date) else 365
         return nominal_value * self.interest_rate * days / yearlen
 
     def _calculate_thirty_360(self, nominal_value: float, valuation_date: date) -> float:
+        period_start = self._previous_coupon_date(valuation_date)
         days = (
-            (valuation_date.year - self.start_date.year) * 360
-            + (valuation_date.month - self.start_date.month) * 30
-            + (valuation_date.day - self.start_date.day)
+            (valuation_date.year - period_start.year) * 360
+            + (valuation_date.month - period_start.month) * 30
+            + (valuation_date.day - period_start.day)
         )
         return nominal_value * self.interest_rate * days / 360
 

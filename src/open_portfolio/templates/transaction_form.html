@@ -286,57 +286,82 @@ document.addEventListener("DOMContentLoaded", function () {
 </script>
 <style>
   .top-actions { display: none; }
-  .tx-layout { display: grid; gap: 1.25rem; }
+  .tx-layout { display: grid; gap: 1.5rem; }
   .tx-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 1rem;
+    gap: 1.2rem;
   }
-  .tx-title { margin: 0; font-size: 2rem; }
+  .tx-title { margin: 0; font-size: clamp(2rem, 2.6vw, 2.6rem); }
   .tx-context {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.5rem 3rem;
-    border-bottom: 1px solid #222;
-    padding-bottom: 0.9rem;
+    gap: 0.75rem 2.5rem;
+    background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(244,248,252,0.88));
+    border: 1px solid #d8e1ea;
+    border-radius: 20px;
+    padding: 1rem 1.15rem;
   }
   .tx-context-row {
     display: grid;
-    grid-template-columns: 140px 1fr;
+    grid-template-columns: minmax(120px, 150px) 1fr;
     align-items: center;
     gap: 0.5rem;
-    font-size: 1.05rem;
+    font-size: 1rem;
   }
   .tx-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 1.5rem;
+    grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.85fr);
+    gap: 1.35rem;
   }
-  .tx-left { display: grid; gap: 0.9rem; }
+  .tx-left {
+    display: grid;
+    gap: 1rem;
+    background: rgba(255,255,255,0.86);
+    border: 1px solid #dae4ee;
+    border-radius: 22px;
+    padding: 1.25rem 1.25rem 1.1rem;
+    box-shadow: 0 12px 22px rgba(32, 59, 86, 0.05);
+  }
   .tx-row {
     display: grid;
-    grid-template-columns: 180px minmax(0, 1fr);
-    gap: 0.7rem;
+    grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+    gap: 0.85rem 1rem;
     align-items: center;
   }
-  .tx-row label { font-size: 1rem; }
-  .tx-field-inline { display: flex; align-items: center; gap: 0.7rem; }
-  .tx-short { max-width: 240px; width: 100%; }
-  .tx-medium { max-width: 320px; width: 100%; }
-  .tx-wide { width: 100%; }
+  .tx-row label {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: #2b4359;
+  }
+  .tx-field-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .tx-short { max-width: 15rem; width: 100%; }
+  .tx-medium { max-width: 20rem; width: 100%; }
+  .tx-wide { width: 100%; max-width: 40rem; }
   .tx-hidden-select { display: none; }
   .tx-readonly {
-    border: 1px solid #bbb;
-    border-radius: 8px;
-    padding: 0.55rem 0.75rem;
+    max-width: 40rem;
+    border: 1px solid #c6d3df;
+    border-radius: 14px;
+    padding: 0.72rem 0.85rem;
     background: #fff;
+    min-height: 3rem;
+    display: inline-flex;
+    align-items: center;
   }
   .tx-card {
-    background: #d0d0d4;
+    background: linear-gradient(180deg, #f7fbfe 0%, #e6eef6 100%);
+    border: 1px solid #d2dde8;
     border-radius: 24px;
-    padding: 1rem 1.2rem;
+    padding: 1.1rem 1.2rem;
     align-self: start;
+    box-shadow: 0 10px 22px rgba(34, 62, 91, 0.06);
   }
   .tx-card + .tx-card { margin-top: 1rem; }
   .tx-card-row {
@@ -344,34 +369,44 @@ document.addEventListener("DOMContentLoaded", function () {
     grid-template-columns: 1fr auto;
     gap: 0.8rem;
     margin-bottom: 0.45rem;
-    font-size: 1.15rem;
+    font-size: 1.03rem;
   }
   .tx-card-row:last-child { margin-bottom: 0; }
   .tx-actions {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.9rem;
   }
   .tx-actions .button {
-    font-size: 1.05rem;
+    min-width: 10.5rem;
+    max-width: 13rem;
+    font-size: 1rem;
     padding: 0.8rem 1rem;
-    border-radius: 12px;
   }
   .tx-actions .button.cancel { background: #6adfd5; color: #000; }
   .tx-home.button {
-    min-width: 180px;
+    min-width: 11rem;
     text-align: center;
-    border-radius: 12px;
   }
-  .tx-muted { color: #444; }
+  .tx-muted { color: #556574; }
+  #instrument_input,
+  #amount,
+  #price,
+  #validity_date,
+  #settlement_currency,
+  #template,
+  #order_type {
+    width: 100%;
+  }
   @media (max-width: 1050px) {
     .tx-body { grid-template-columns: 1fr; }
-    .tx-actions { grid-template-columns: 1fr 1fr; }
   }
   @media (max-width: 760px) {
+    .tx-header { flex-direction: column; align-items: stretch; }
     .tx-context { grid-template-columns: 1fr; }
     .tx-row { grid-template-columns: 1fr; }
-    .tx-actions { grid-template-columns: 1fr; }
+    .tx-actions { flex-direction: column; }
+    .tx-actions .button { max-width: none; width: 100%; }
   }
 </style>
 {% endblock %}
@@ -491,6 +526,7 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
 
         <div class="tx-card">
+          <div class="tx-card-row"><span>Brutobedrag:</span><strong>{% if estimated_trade is not none and selected_settlement_currency %}{{ format_currency(estimated_trade, selected_settlement_currency) }}{% else %}-{% endif %}</strong></div>
           <div class="tx-card-row"><span>Transactiekosten:</span><strong>{% if estimated_cost is not none and selected_settlement_currency %}{{ format_currency(estimated_cost, selected_settlement_currency) }}{% else %}-{% endif %}</strong></div>
           {% if current_product_kind == 'bond' %}
           <div class="tx-card-row"><span>Opgelopen rente:</span><strong>{% if estimated_accrued is not none and selected_settlement_currency %}{{ format_currency(estimated_accrued, selected_settlement_currency) }}{% else %}-{% endif %}</strong></div>
@@ -508,16 +544,6 @@ document.addEventListener("DOMContentLoaded", function () {
     </div>
   </div>
 </form>
-
-{% if order_warnings or order_placeholder_messages %}
-<div class="form-row">
-  <label>Bekende placeholders</label>
-  <div>
-    {% for warning in order_warnings %}<div>- {{ warning }}</div>{% endfor %}
-    {% if not order_warnings %}{% for item in order_placeholder_messages %}<div>- {{ item }}</div>{% endfor %}{% endif %}
-  </div>
-</div>
-{% endif %}
 
 {% if success_message %}<div class="success">{{ success_message }}</div>{% endif %}
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
