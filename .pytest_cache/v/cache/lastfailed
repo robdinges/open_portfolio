@@ -1,1 +1,11 @@
-{}
+{
+  "tests/test_accrued_interest.py::TestActActAccruedInterest": true,
+  "tests/test_accrued_interest.py::TestThirty360AccruedInterest": true,
+  "tests/test_accrued_interest.py::TestAccruedInterestEdgeCases": true,
+  "tests/test_accrued_interest.py": true,
+  "tests/test_database.py": true,
+  "tests/test_gui_scenario.py": true,
+  "tests/test_reporting.py": true,
+  "tests/test_transactions.py": true,
+  "tests/test_web_app.py": true
+}
