@@ -92,13 +92,13 @@ def test_market_sell_accepts_decimal_comma_and_redirects():
             "/transactions/new",
             data={
                 "client_id": "1",
-                "portfolio_id": "2",
+                "portfolio_id": "1",
                 "template": "SELL",
                 "order_type": "MARKET",
-                "product_id": "1",
-                "amount": "1,0",
+                "product_id": "5",
+                "amount": "50,0",
                 "transaction_date": "2026-03-01",
-                "settlement_currency": "USD",
+                "settlement_currency": "EUR",
                 "save": "1",
             },
             follow_redirects=False,
@@ -108,7 +108,7 @@ def test_market_sell_accepts_decimal_comma_and_redirects():
         location = response.headers.get("Location", "")
         assert "/transactions" in location
         assert "client_id=1" in location
-        assert "portfolio_id=2" in location
+        assert "portfolio_id=1" in location
 
 
 def test_limit_bond_form_shows_percent_suffix_and_nominal_label():

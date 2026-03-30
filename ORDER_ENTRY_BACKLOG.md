@@ -18,6 +18,9 @@ Status: Actieve gap-registratie voor professionele orderapplicatie
 | OE-GAP-003 | Intraday prijsversheid market orders | Laatste koers op of voor transactiedatum | Oude koersen kunnen onbedoeld gebruikt worden | Should | src/open_portfolio/web_app.py, src/open_portfolio/prices.py |
 | OE-GAP-004 | Uitgebreide audit actor context | Alleen orderstatus en timestamps | Traceability voor approvals is beperkt | Must | src/open_portfolio/database.py, src/open_portfolio/web_app.py |
 | OE-GAP-005 | Persistente order-draft opslag | ✅ Opgeleverd (SQLite DB + retentiebeleid) | N/A | Must | src/open_portfolio/database.py, src/open_portfolio/order_entry.py |
+| OE-GAP-006 | Uitgebreid kostenmodel (per venue) | Vast percentage (0,1%) voor alle orders | Nettobedrag kan afwijken van werkelijke broker-executie | Should | src/open_portfolio/web_app.py, src/open_portfolio/transactions.py |
+| OE-GAP-007 | Opgelopen rente op settlementdatum | Berekening op transactiedatum i.p.v. settlementdatum | Rentebedrag kan afwijken bij T+2 settlement | Should | src/open_portfolio/products.py, src/open_portfolio/web_app.py |
+| OE-GAP-008 | Negatieve opgelopen rente (ex-coupon) guard | Negatieve opgelopen rente wordt geaccepteerd zonder waarschuwing | Mogelijk onverwachte bedragen bij ex-coupon orders | Should | src/open_portfolio/web_app.py, src/open_portfolio/products.py |
 
 ## Voortgang
 
@@ -57,6 +60,22 @@ Status: Actieve gap-registratie voor professionele orderapplicatie
 - Draft/validated/submitted orders worden persistent opgeslagen.
 - Herladen van scherm kan bestaand concept hervatten op draft-id.
 - Geen regressie in bestaande directe boekingsflow.
+
+### OE-GAP-006
+- Fee engine ondersteunt percentage, vaste en venue-specifieke componenten.
+- Kosten worden per component getoond in ordersamenvatting.
+- Netto-impact sluit aan op boekingsresultaat in transacties.
+- Voorlopig wordt 0,1% standaardtarief gehanteerd als placeholder.
+
+### OE-GAP-007
+- Opgelopen rente wordt berekend op basis van settlementdatum (T+n) i.p.v. transactiedatum.
+- Settlementcyclus is configureerbaar per instrument of markt.
+- Rentebedrag in ordersamenvatting reflecteert het werkelijke settlementbedrag.
+
+### OE-GAP-008
+- Bij negatieve opgelopen rente (ex-coupondatum) wordt een waarschuwing getoond.
+- Order wordt niet geblokkeerd maar gebruiker krijgt expliciete melding.
+- Testdekking bevat scenario met transactiedatum in ex-couponperiode.
 
 ## Traceability
 

@@ -15,7 +15,6 @@ from .transactions import (
     TransactionManager,
 )
 from .prices import CurrencyPrices, ProductPrices
-from .analytics import PortfolioAnalytics
 from .product_collection import ProductCollection
 from .database import Database
 from .order_entry import (
@@ -44,7 +43,6 @@ __all__ = [
     "TransactionManager",
     "CurrencyPrices",
     "ProductPrices",
-    "PortfolioAnalytics",
     "ProductCollection",
     "make_app",
     "run_web_app",
