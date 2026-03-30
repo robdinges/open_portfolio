@@ -9,6 +9,10 @@ cd "$APP_DIR"
 
 mkdir -p "$APP_DIR/tmp" "$APP_DIR/shared" "$APP_DIR/shared/logs"
 
+if [[ ! -d .venv ]]; then
+"$PYTHON_BIN" -m venv --without-pip .venv
+fi
+
 if [[ ! -x .venv/bin/pip ]]; then
 curl -fsS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py
 .venv/bin/python /tmp/get-pip.py
