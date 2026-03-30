@@ -62,4 +62,4 @@ jobs:
         shell: bash
         run: |
           ssh -i ~/.ssh/id_rsa -o IdentitiesOnly=yes -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
-            "cd '${{ secrets.APP_DIR }}' && APP_DIR='${{ secrets.APP_DIR }}' BRANCH='main' ./scripts/deploy.sh"
+            "cd '${{ secrets.APP_DIR }}' && chmod +x ./scripts/deploy_shared_host.sh && APP_DIR='${{ secrets.APP_DIR }}' RESTART_TOUCH_FILE='${{ secrets.RESTART_TOUCH_FILE }}' ./scripts/deploy_shared_host.sh"
