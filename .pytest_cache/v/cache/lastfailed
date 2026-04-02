@@ -1,7 +1,5 @@
 {
-  "tests/test_database.py": true,
   "tests/test_accrued_interest.py::TestActActAccruedInterest": true,
   "tests/test_accrued_interest.py::TestThirty360AccruedInterest": true,
-  "tests/test_accrued_interest.py::TestAccruedInterestEdgeCases": true,
-  "tests/test_accrued_interest.py": true
+  "tests/test_accrued_interest.py::TestAccruedInterestEdgeCases": true
 }

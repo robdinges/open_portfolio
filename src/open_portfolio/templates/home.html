@@ -12,9 +12,6 @@
         {% endfor %}
       </select>
     </form>
-    {% if selected_client %}
-      <p>Client: <span class="code-desc">{{ selected_client.client_id }} – {{ selected_client.name }}</span></p>
-    {% endif %}
   </div>
 </section>
 {% if selected_client %}

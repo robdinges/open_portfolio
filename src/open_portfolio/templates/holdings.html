@@ -3,29 +3,29 @@
 {% block content %}
 <h2>Holdings</h2>
 <div class="context-grid">
+  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
   <div class="label">Portefeuille</div><div><strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong></div>
   <div class="label">Portefeuille id</div><div><strong>{{ selected_portfolio.portfolio_id if selected_portfolio else '-' }}</strong></div>
-  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
 </div>
 {% if selected_portfolio %}
 <table>
   <thead>
-    <tr><th>Instrument ID</th><th>Naam</th><th>Type</th><th>Valuta</th><th>Aantal / Nominaal</th><th>Prijs</th><th>Acties</th></tr>
+    <tr><th>ISIN</th><th>Naam</th><th>Type</th><th>Valuta</th><th>Aantal / Nominaal</th><th>Prijs</th><th>Acties</th></tr>
   </thead>
   <tbody>
     {% if selected_portfolio.securities_account and selected_portfolio.securities_account.holdings %}
       {% for h in selected_portfolio.securities_account.holdings %}
       {% set display_price = h.last_price if h.last_price is defined else h.product.get_price(valuation_date) %}
       <tr>
-        <td>{{ h.product.instrument_id }}</td>
+        <td>{{ h.product.isin if h.product.isin else '-' }}</td>
         <td>{{ h.product.description }}</td>
-        <td>{{ h.product.__class__.__name__ }}</td>
+        <td>{{ translate_instrument_type(h.product.__class__.__name__) }}</td>
         <td>{{ h.product.issue_currency }}</td>
         <td class="valuta">
           {% if h.product.is_bond() %}
-            {{ h.amount | round(2) }} {{ h.product.issue_currency }}
+            {{ format_quantity(h.amount) }} {{ h.product.issue_currency }}
           {% else %}
-            {{ h.amount | round(2) }} stuks
+            {{ format_quantity(h.amount) }}
           {% endif %}
         </td>
         <td class="valuta">
@@ -36,13 +36,13 @@
           {% endif %}
         </td>
         <td>
-          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=BUY&return_to=holdings">B</a>
-          <a class="button" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=SELL&return_to=holdings">S</a>
+          <a class="button button-sm" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=BUY&return_to=holdings">B</a>
+          <a class="button button-sm" href="/transactions/new?client_id={{ selected_client.client_id }}&portfolio_id={{ selected_portfolio.portfolio_id }}&product_id={{ h.product.instrument_id }}&template=SELL&return_to=holdings">S</a>
         </td>
       </tr>
       {% endfor %}
     {% else %}
-      <tr><td colspan="6">Geen holdings voor deze portefeuille.</td></tr>
+      <tr><td colspan="7">Geen holdings voor deze portefeuille.</td></tr>
     {% endif %}
   </tbody>
 </table>

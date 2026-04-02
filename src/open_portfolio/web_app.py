@@ -57,20 +57,48 @@ def create_demo_data():
 # --- Currency formatting utility ---
 
 def format_currency(amount, currency="EUR", symbol="€"):
-    symbols = {
-        "EUR": "EUR",
-        "USD": "USD",
-        "GBP": "GBP",
-        "CHF": "CHF",
-    }
     try:
         amount = float(amount)
     except Exception:
         return amount
     s = f"{amount:,.2f}"
     s = s.replace(",", "_").replace(".", ",").replace("_", ".")
-    display_symbol = symbols.get(currency, symbol)
-    return f"{display_symbol} {s}"
+    return f"{s} {currency}"
+
+def format_quantity(value):
+    """Format quantity: whole numbers without decimals, otherwise show decimals."""
+    try:
+        value = float(value)
+    except Exception:
+        return value
+    if abs(value - round(value)) < 1e-9:
+        return str(int(round(value)))
+    return f"{value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
+def translate_movement_type(movement_type):
+    """Translate movement type to Dutch."""
+    translations = {
+        "security_buy": "Aankoop",
+        "security_sell": "Verkoop",
+        "deposit": "Storting",
+        "withdrawal": "Opname",
+        "dividend": "Dividend",
+        "costs": "Kosten",
+        "accrued_interest": "Opgelopen rente",
+    }
+    return translations.get(str(movement_type).lower(), str(movement_type))
+
+def translate_instrument_type(instrument_type):
+    """Translate instrument type to Dutch."""
+    translations = {
+        "STOCK": "Aandeel",
+        "BOND": "Obligatie",
+        "Stock": "Aandeel",
+        "Bond": "Obligatie",
+        "OPTION": "Optie",
+        "FUND": "Fonds",
+    }
+    return translations.get(str(instrument_type), str(instrument_type))
 
 def make_app(client=None, product_collection=None, currency_prices=None, order_database=None):
 
@@ -87,6 +115,16 @@ def make_app(client=None, product_collection=None, currency_prices=None, order_d
         clients = client if isinstance(client, list) else [client]
 
     app = Flask(__name__)
+
+    @app.context_processor
+    def inject_helpers():
+        return {
+            "format_currency": format_currency,
+            "format_quantity": format_quantity,
+            "translate_movement_type": translate_movement_type,
+            "translate_instrument_type": translate_instrument_type,
+        }
+
     tx_date_edit_enabled = os.getenv("OPEN_PORTFOLIO_ENABLE_TX_DATE_EDIT", "0").strip().lower() in {"1", "true", "yes", "on"}
     tx_manager = TransactionManager()
     if order_database is None:

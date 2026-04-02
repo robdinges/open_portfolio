@@ -3,13 +3,13 @@
 {% block content %}
 <h2>Transacties</h2>
 <div class="context-grid">
+  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
   <div class="label">Portefeuille</div><div><strong>{{ selected_portfolio.name if selected_portfolio else '-' }}</strong></div>
   <div class="label">Portefeuille id</div><div><strong>{{ selected_portfolio.portfolio_id if selected_portfolio else '-' }}</strong></div>
-  <div class="label">Klant</div><div><strong>{{ selected_client.name if selected_client else '-' }}</strong></div>
 </div>
 <table>
   <thead>
-    <tr><th>Datum</th><th>Type</th><th>Product</th><th>Aantal</th><th>Prijs</th><th>Cashrekening</th><th>Totaal (cash valuta)</th></tr>
+    <tr><th>Datum</th><th>Type</th><th>ISIN</th><th>Naam</th><th>Aantal</th><th>Prijs</th><th>Cashrekening</th><th>Totaal (cash valuta)</th></tr>
   </thead>
   <tbody>
     {% for tx in transactions %}
@@ -26,13 +26,14 @@
         {% set product = product_collection.search_product_id(sm.product_id) if product_collection else None %}
         <tr>
           <td>{{ tx.transaction_date }}</td>
-          <td>{{ sm.type }}</td>
-          <td>{{ sm.product_id }}</td>
+          <td>{{ translate_movement_type(sm.type) }}</td>
+          <td>{{ product.isin if product and product.isin else '-' }}</td>
+          <td>{{ product.description if product else sm.product_id }}</td>
           <td class="valuta">
             {% if product and product.is_bond() %}
-              {{ sm.amount_nominal | round(2) }} {{ product.issue_currency }}
+              {{ format_quantity(sm.amount_nominal) }} {{ product.issue_currency }}
             {% else %}
-              {{ sm.amount_nominal | round(2) }} stuks
+              {{ format_quantity(sm.amount_nominal) }}
             {% endif %}
           </td>
           <td class="valuta">
@@ -42,13 +43,14 @@
               {{ format_currency(sm.price, product.issue_currency if product else 'EUR') }}
             {% endif %}
           </td>
-          <td>{{ ns.account }} ({{ ns.currency }})</td>
+          <td>{{ ns.currency }}</td>
           <td class="valuta">{{ format_currency(ns.total, ns.currency) }}</td>
         </tr>
         {% endfor %}
       {% else %}
       <tr>
         <td>{{ tx.transaction_date }}</td>
+        <td>-</td>
         <td>-</td>
         <td>-</td>
         <td class="valuta">-</td>
@@ -58,7 +60,7 @@
       </tr>
       {% endif %}
     {% else %}
-      <tr><td colspan="7">Geen transacties voor deze portefeuille.</td></tr>
+      <tr><td colspan="8">Geen transacties voor deze portefeuille.</td></tr>
     {% endfor %}
   </tbody>
 </table>

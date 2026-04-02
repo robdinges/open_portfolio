@@ -28,24 +28,23 @@
 
 <table>
   <thead>
-    <tr><th>Nr</th><th>ISIN</th><th>Naam</th><th>Omschrijving</th><th>Type</th><th>Valuta</th><th>Status</th><th>Actie</th></tr>
+    <tr><th>Nr</th><th>ISIN</th><th>Omschrijving</th><th>Type</th><th>Valuta</th><th>Status</th><th>Actie</th></tr>
   </thead>
   <tbody>
     {% for ins in instruments %}
     <tr>
       <td>{{ ins.instrument_id }}</td>
       <td>{{ ins.isin or '' }}</td>
-      <td>{{ ins.name or ins.description.split(' ')[0] }}</td>
       <td>{{ ins.description }}</td>
-      <td>{{ ins.instrument_type }}</td>
+      <td>{{ translate_instrument_type(ins.instrument_type) }}</td>
       <td>{{ ins.issue_currency }}</td>
       <td>{% if ins.is_active %}Actief{% else %}Inactief{% endif %}</td>
       <td>
-        <a class="button" href="/instruments/edit/{{ ins.instrument_id }}">Wijzig</a>
+        <a class="button button-sm" href="/instruments/edit/{{ ins.instrument_id }}">Wijzig</a>
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="8">Geen instrumenten gevonden.</td></tr>
+    <tr><td colspan="7">Geen instrumenten gevonden.</td></tr>
     {% endfor %}
   </tbody>
 </table>
