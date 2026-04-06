@@ -128,3 +128,43 @@ Datum: 2026-03-29
 
 5. **Analysepagina** met transparante tabellen (input, sale, coupon
    schedule, discounted cashflows, final decision).
+
+---
+
+## Analyse: tegenstrijdigheden, ongebruikte functies en redundantie
+
+Datum: 2026-04-06
+
+### A. Tegenstrijdigheden tussen requirements en realisatie
+
+| # | Locatie | Requirement | Realisatie | Ernst |
+|---|---|---|---|---|
+| C-001 | `transactions.py:271`, `enums.py` | REQ-01 WD-060: dividend → "Dividend"; REQ-04 BR-103: DIVIDEND-template produceert dividend-beweging. | `_dividend_template` gebruikt `MovementType.INTEREST` (waarde `interest`). Er bestaat geen `MovementType.DIVIDEND` in het enum. Dividenden tonen daardoor als "interest" (geen vertaling) in plaats van "Dividend". | Hoog |
+| C-002 | `templates/holdings.html:22` | REQ-03 SHO-005: instrumenttype vertaald via `translate_instrument_type`. | Template roept `translate_instrument_type(h.product.__class__.__name__)` aan. Dit levert klassenamen ("Product", "Bond", "Stock") i.p.v. enum-waarden ("STOCK", "BOND"). De vertaalfunctie heeft fallback-mappings voor "Stock" en "Bond" maar niet voor "Product" — generieke producten (OPTION, FUND) tonen als klassenaam. | Middel |
+| C-003 | `templates/holdings.html:20` | REQ-03 SHO-007: kolom Prijs toont actuele koers. | Template verwijst naar `h.last_price` die nooit gezet wordt op holdings-dicts (`{"product": ..., "amount": ...}`). Jinja `is defined`-check is altijd False → fallback `h.product.get_price(valuation_date)` werkt, maar de dode code verbergt een ontwerp-mismatch. | Laag |
+| C-004 | `enums.py` | REQ-01 WD-060: vertaaltabel bevat "dividend" → "Dividend". | `MovementType` enum kent geen `DIVIDEND`-waarde. De vertaling in `translate_movement_type` voor "dividend" wordt nooit bereikt. | Hoog (gekoppeld aan C-001) |
+| C-005 | `web_app.py:91-103` | REQ-01 WD-050: vertalingen voor alle instrumenttypen (STOCK, BOND, OPTION, FUND). | `translate_instrument_type` bevat extra fallbacks voor Python-klassenamen ("Stock", "Bond") die niet in requirements staan. Dit maskeert het eigenlijke probleem (C-002) in plaats van het op te lossen. | Laag |
+
+### B. Ongebruikte backend-functies
+
+| # | Functie / klasse | Locatie | Aangeroepen vanuit | Toelichting |
+|---|---|---|---|---|
+| U-001 | `Portfolio.list_accounts()` | `accounts.py:151` | Alleen `portfolio_sim.ipynb` | Console-printmethode, niet gebruikt in webapplicatie. |
+| U-002 | `Portfolio.list_holdings()` | `accounts.py:166` | Alleen `portfolio_sim.ipynb` | Console-printmethode met eigen positionering-logica; web gebruikt `securities_account.holdings` rechtstreeks. |
+| U-003 | `Portfolio.list_transactions()` | `accounts.py:210` | Nergens | Console-printmethode, zelfs niet in notebook. Dubbelt met `list_all_transactions()` die wél overal wordt gebruikt. |
+| U-004 | `CurrencyPrices.show_prices()` | `prices.py:31` | Nergens | Debug-printmethode zonder aanroepers. |
+| U-005 | `ProductPrices.show_prices()` | `prices.py:47` | Nergens | Debug-printmethode zonder aanroepers. |
+| U-006 | `ProductPrices` (klasse) | `prices.py:35` | Nergens geïnstantieerd | Geëxporteerd in `__init__.py` maar nooit aangemaakt; prijzen zitten op `Product`-objecten. |
+| U-007 | `InMemoryOrderRepository` | `order_entry.py:37` | Nergens in productie | Vervangen door `DatabaseOrderRepository`; enkel nog in `__init__.py` export. |
+| U-008 | `QuotationType` enum | `enums.py:11` | Nergens | Gedefinieerd maar nooit gebruikt in code. |
+| U-009 | `TransactionType` enum | `enums.py:15` | Nergens | Gedefinieerd maar nooit gebruikt in code. |
+| U-010 | `AccountType.OBLIGO` enum-waarde | `enums.py:30` | Nergens | Enumwaarde zonder enig gebruik. |
+
+### C. Redundante logica
+
+| # | Locatie 1 | Locatie 2 | Beschrijving | Aanbeveling |
+|---|---|---|---|---|
+| R-001 | `web_app.py:233` `parse_float()` | `order_service.py:12` `parse_decimal()` | Identieke logica: strip, vervang komma→punt, float-conversie, zelfde foutmeldingen. `web_app.py` importeert `parse_decimal` als `os_parse_decimal` maar definieert daarnaast een eigen `parse_float`. | Verwijder `parse_float()`; gebruik `os_parse_decimal` overal. |
+| R-002 | `accounts.py:166` `list_holdings()` | `templates/holdings.html` | `list_holdings()` berekent posities via transaction-replay; de webpagina gebruikt `securities_account.holdings` rechtstreeks. Twee verschillende mechanismen voor dezelfde data. | Verwijder `list_holdings()` of documenteer als notebook-only. |
+| R-003 | `accounts.py:210` `list_transactions()` | `accounts.py:136` `list_all_transactions()` | `list_transactions()` roept `list_all_transactions()` aan en formatteert naar console. Dezelfde data, extra laag. | Verwijder `list_transactions()` (is al nergens aangeroepen). |
+| R-004 | `translate_instrument_type()`: mappings voor enum-waarden ("STOCK", "BOND") **plus** klassenamen ("Stock", "Bond") | — | Twee sets sleutels voor hetzelfde doel. Klassenaam-mappings zijn een workaround voor het feit dat `holdings.html` `__class__.__name__` doorgeeft i.p.v. `product.type`. | Gebruik `product.type.value` of `product.type.name` in template; verwijder klassenaam-fallbacks uit vertaalfunctie. |
