@@ -58,5 +58,5 @@ def render(
         }
         for tx in reversed(filtered)  # newest first
     ]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     st.caption(f"Showing {len(filtered)} of {len(txs)} transactions")

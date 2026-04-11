@@ -55,7 +55,7 @@ def render(
             }
             for h in overview.holdings
         ]
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
     else:
         st.info("No holdings found.")
 
@@ -81,4 +81,4 @@ def render(
                 for ccy, bal in overview.cash_balances.items()
             ]
         )
-        st.dataframe(cash_df, use_container_width=True, hide_index=True)
+        st.dataframe(cash_df, width="stretch", hide_index=True)

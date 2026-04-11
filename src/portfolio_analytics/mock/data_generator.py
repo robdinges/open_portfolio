@@ -31,25 +31,25 @@ from portfolio_analytics.domain.models import (
 # ---------------------------------------------------------------------------
 
 _STOCK_TEMPLATES = [
-    ("Apple Inc.", "USD"),
-    ("Microsoft Corp.", "USD"),
-    ("Alphabet Inc.", "USD"),
-    ("Amazon.com Inc.", "USD"),
-    ("ASML Holding", "EUR"),
-    ("SAP SE", "EUR"),
-    ("TotalEnergies SE", "EUR"),
-    ("Nestlé SA", "CHF"),
-    ("HSBC Holdings", "GBP"),
-    ("Unilever PLC", "GBP"),
+    ("Apple Inc.", "USD", "Technology", "US", "NASDAQ100"),
+    ("Microsoft Corp.", "USD", "Technology", "US", "NASDAQ100"),
+    ("Alphabet Inc.", "USD", "Communication Services", "US", "NASDAQ100"),
+    ("Amazon.com Inc.", "USD", "Consumer Discretionary", "US", "NASDAQ100"),
+    ("ASML Holding", "EUR", "Technology", "NL", "EUROSTOXX50"),
+    ("SAP SE", "EUR", "Technology", "DE", "DAX"),
+    ("TotalEnergies SE", "EUR", "Energy", "FR", "CAC40"),
+    ("Nestlé SA", "CHF", "Consumer Staples", "CH", "SMI"),
+    ("HSBC Holdings", "GBP", "Financials", "UK", "FTSE100"),
+    ("Unilever PLC", "GBP", "Consumer Staples", "UK", "FTSE100"),
 ]
 
 _BOND_TEMPLATES = [
-    ("German Bund 2.5% 2034", "EUR", 2.5),
-    ("French OAT 3.0% 2033", "EUR", 3.0),
-    ("US Treasury 4.25% 2032", "USD", 4.25),
-    ("UK Gilt 3.75% 2035", "GBP", 3.75),
-    ("Netherlands 2.0% 2030", "EUR", 2.0),
-    ("Austria 2.75% 2031", "EUR", 2.75),
+    ("German Bund 2.5% 2034", "EUR", 2.5, "Germany", "AA", "Government"),
+    ("French OAT 3.0% 2033", "EUR", 3.0, "France", "AA", "Government"),
+    ("US Treasury 4.25% 2032", "USD", 4.25, "United States", "AA+", "Government"),
+    ("UK Gilt 3.75% 2035", "GBP", 3.75, "United Kingdom", "AA-", "Government"),
+    ("Netherlands 2.0% 2030", "EUR", 2.0, "Netherlands", "AAA", "Government"),
+    ("Austria 2.75% 2031", "EUR", 2.75, "Austria", "AA+", "Government"),
 ]
 
 
@@ -95,17 +95,23 @@ def generate_portfolio(
     bond_picks = rng.sample(_BOND_TEMPLATES, min(n_bonds, len(_BOND_TEMPLATES)))
 
     instruments: list[Instrument] = []
-    for i, (name, ccy) in enumerate(stock_picks, start=1):
+    for i, (name, ccy, sector, country, benchmark_id) in enumerate(stock_picks, start=1):
         instruments.append(
             Instrument(
                 id=f"STK-{portfolio_id[-4:]}-{i:03d}",
                 name=name,
                 type=InstrumentType.STOCK,
                 currency=ccy,
-                metadata={"sector": "Technology" if "tech" in name.lower() else "General"},
+                metadata={
+                    "sector": sector,
+                    "country": country,
+                    "benchmark_id": benchmark_id,
+                    "dividend_yield": round(rng.uniform(0.005, 0.035), 4),
+                },
             )
         )
-    for i, (name, ccy, coupon) in enumerate(bond_picks, start=1):
+    for i, (name, ccy, coupon, issuer, credit_rating, sector) in enumerate(bond_picks, start=1):
+        maturity_year = 2030 + rng.randint(0, 5)
         instruments.append(
             Instrument(
                 id=f"BND-{portfolio_id[-4:]}-{i:03d}",
@@ -114,7 +120,15 @@ def generate_portfolio(
                 currency=ccy,
                 metadata={
                     "coupon_rate": coupon,
-                    "maturity_year": 2030 + rng.randint(0, 5),
+                    "maturity_year": maturity_year,
+                    "maturity_date": f"{maturity_year}-12-31",
+                    "issue_date": f"{maturity_year - 10}-01-01",
+                    "payment_frequency": 2,
+                    "day_count_convention": "ACT/ACT",
+                    "face_value": 100.0,
+                    "issuer": issuer,
+                    "credit_rating": credit_rating,
+                    "sector": sector,
                 },
             )
         )

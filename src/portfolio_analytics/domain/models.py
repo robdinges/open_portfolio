@@ -155,3 +155,137 @@ class PortfolioOverview:
     cash_balances: dict[str, float]  # currency → balance
     unrealized_pnl: float
     as_of: datetime
+
+
+@dataclass
+class BondAnalyticsEntry:
+    """Bond-specific analytics for a single holding."""
+
+    instrument_id: str
+    instrument_name: str
+    quantity: float
+    currency: str
+    clean_price: float
+    dirty_price: float
+    accrued_interest: float
+    coupon_rate: float
+    current_yield: float
+    simplified_ytm: float
+    macaulay_duration: float
+    modified_duration: float
+    convexity: float
+    maturity_date: Optional[datetime]
+    market_value: float
+
+
+@dataclass
+class BondAnalyticsReport:
+    """Portfolio-level bond analytics summary."""
+
+    portfolio_id: str
+    currency: str
+    as_of: datetime
+    entries: list[BondAnalyticsEntry]
+    total_accrued_interest: float
+    total_dirty_value: float
+    average_ytm: float
+
+
+@dataclass
+class PerformancePoint:
+    """One point in a portfolio value time series."""
+
+    timestamp: datetime
+    portfolio_value: float
+
+
+@dataclass
+class HoldingPerformance:
+    """Performance summary for one holding over a lookback period."""
+
+    instrument_id: str
+    instrument_name: str
+    instrument_type: InstrumentType
+    start_price: float
+    end_price: float
+    total_return: float
+    annualized_return: float
+    weight: float
+    pnl_contribution: float
+
+
+@dataclass
+class PerformanceReport:
+    """Portfolio performance metrics and time series."""
+
+    portfolio_id: str
+    currency: str
+    as_of: datetime
+    start_date: datetime
+    total_return: float
+    annualized_return: float
+    money_weighted_return: float
+    time_weighted_return: float
+    max_drawdown: float
+    series: list[PerformancePoint]
+    holdings: list[HoldingPerformance]
+
+
+@dataclass
+class RiskMetricsReport:
+    """Portfolio risk metrics derived from the return series."""
+
+    portfolio_id: str
+    currency: str
+    as_of: datetime
+    daily_volatility: float
+    annualized_volatility: float
+    sharpe_ratio: float
+    var_95: float
+    cvar_95: float
+    max_drawdown: float
+    concentration_index: float
+    correlation_matrix: dict[str, dict[str, float]]
+
+
+@dataclass
+class AttributionEntry:
+    """Attribution slice by instrument or aggregate grouping."""
+
+    label: str
+    market_value: float
+    weight: float
+    unrealized_pnl: float
+    pnl_contribution: float
+
+
+@dataclass
+class AttributionReport:
+    """Contribution and attribution report."""
+
+    portfolio_id: str
+    currency: str
+    as_of: datetime
+    by_instrument: list[AttributionEntry]
+    by_asset_class: list[AttributionEntry]
+
+
+@dataclass
+class DataQualityIssue:
+    """One data-quality finding for an instrument or portfolio."""
+
+    instrument_id: str
+    instrument_name: str
+    severity: str
+    field_name: str
+    message: str
+
+
+@dataclass
+class DataQualityReport:
+    """Coverage and quality checks for a portfolio's instrument data."""
+
+    portfolio_id: str
+    as_of: datetime
+    coverage_pct: float
+    issues: list[DataQualityIssue]

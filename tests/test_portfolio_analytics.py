@@ -544,6 +544,47 @@ class TestPortfolioAnalytics:
         holdings = analytics.get_holdings("P-001", datetime(2023, 1, 1))
         assert holdings == []
 
+    def test_bond_analytics_report(self, seeded_repos, fx_service):
+        analytics, _ = self._setup(seeded_repos, fx_service)
+        seeded_repos["transaction"].save(
+            Transaction(
+                id="BOND-BUY", portfolio_id="P-001", instrument_id="BND-001",
+                type=TransactionType.BUY, quantity=5000, price=99.5,
+                amount=-497500.0, currency="EUR",
+                timestamp=datetime(2024, 4, 1, 10, 0),
+            )
+        )
+        report = analytics.get_bond_analytics("P-001", datetime(2024, 7, 1))
+        assert report.portfolio_id == "P-001"
+        assert len(report.entries) == 1
+        assert report.entries[0].dirty_price >= report.entries[0].clean_price
+
+    def test_performance_report(self, seeded_repos, fx_service):
+        analytics, _ = self._setup(seeded_repos, fx_service)
+        report = analytics.get_performance_report("P-001", datetime(2024, 7, 1), 63)
+        assert report.portfolio_id == "P-001"
+        assert len(report.series) > 5
+        assert report.start_date < report.as_of
+
+    def test_risk_metrics(self, seeded_repos, fx_service):
+        analytics, _ = self._setup(seeded_repos, fx_service)
+        report = analytics.get_risk_metrics("P-001", datetime(2024, 7, 1), 63)
+        assert report.portfolio_id == "P-001"
+        assert report.annualized_volatility >= 0
+        assert report.var_95 >= 0
+
+    def test_attribution_report(self, seeded_repos, fx_service):
+        analytics, _ = self._setup(seeded_repos, fx_service)
+        report = analytics.get_attribution_report("P-001", datetime(2024, 7, 1))
+        assert report.by_instrument
+        assert report.by_asset_class
+
+    def test_data_quality_report(self, seeded_repos, fx_service):
+        analytics, _ = self._setup(seeded_repos, fx_service)
+        report = analytics.get_data_quality_report("P-001", datetime(2024, 7, 1))
+        assert report.portfolio_id == "P-001"
+        assert report.coverage_pct >= 0
+
 
 # ===================================================================
 # Mock data generator tests
@@ -652,3 +693,33 @@ class TestFastAPI:
         pid = client._container.config.demo_portfolio_id
         resp = client.get(f"/portfolio/{pid}/overview?date=not-a-date")
         assert resp.status_code == 400
+
+    def test_bond_analytics_endpoint(self, client):
+        pid = client._container.config.demo_portfolio_id
+        resp = client.get(f"/portfolio/{pid}/bond-analytics?date=2025-06-01")
+        assert resp.status_code == 200
+        assert "entries" in resp.json()
+
+    def test_performance_endpoint(self, client):
+        pid = client._container.config.demo_portfolio_id
+        resp = client.get(f"/portfolio/{pid}/performance?date=2025-06-01&lookback_days=126")
+        assert resp.status_code == 200
+        assert "series" in resp.json()
+
+    def test_risk_endpoint(self, client):
+        pid = client._container.config.demo_portfolio_id
+        resp = client.get(f"/portfolio/{pid}/risk?date=2025-06-01&lookback_days=126")
+        assert resp.status_code == 200
+        assert "annualized_volatility" in resp.json()
+
+    def test_attribution_endpoint(self, client):
+        pid = client._container.config.demo_portfolio_id
+        resp = client.get(f"/portfolio/{pid}/attribution?date=2025-06-01")
+        assert resp.status_code == 200
+        assert "by_instrument" in resp.json()
+
+    def test_data_quality_endpoint(self, client):
+        pid = client._container.config.demo_portfolio_id
+        resp = client.get(f"/portfolio/{pid}/data-quality?date=2025-06-01")
+        assert resp.status_code == 200
+        assert "coverage_pct" in resp.json()

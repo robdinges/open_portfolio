@@ -50,13 +50,43 @@ as_of = datetime(as_of_date.year, as_of_date.month, as_of_date.day, 23, 59, 59)
 # Navigation
 page = st.sidebar.radio(
     "Page",
-    options=["Overview", "Instruments", "Transactions", "Static Data Editor"],
+    options=[
+        "Overview",
+        "Bond Analytics",
+        "Performance",
+        "Risk",
+        "Attribution",
+        "Data Quality",
+        "Instruments",
+        "Transactions",
+        "Static Data Editor",
+    ],
 )
 
 # Route to the selected page
 if page == "Overview":
     from portfolio_analytics.ui.portfolio_overview import render as render_overview
     render_overview(container.analytics_service, portfolio_id, as_of)
+
+elif page == "Bond Analytics":
+    from portfolio_analytics.ui.bond_analytics_page import render as render_bond_analytics
+    render_bond_analytics(container.analytics_service, portfolio_id, as_of)
+
+elif page == "Performance":
+    from portfolio_analytics.ui.performance_page import render as render_performance
+    render_performance(container.analytics_service, portfolio_id, as_of)
+
+elif page == "Risk":
+    from portfolio_analytics.ui.risk_page import render as render_risk
+    render_risk(container.analytics_service, portfolio_id, as_of)
+
+elif page == "Attribution":
+    from portfolio_analytics.ui.attribution_page import render as render_attribution
+    render_attribution(container.analytics_service, portfolio_id, as_of)
+
+elif page == "Data Quality":
+    from portfolio_analytics.ui.data_quality_page import render as render_data_quality
+    render_data_quality(container.analytics_service, portfolio_id, as_of)
 
 elif page == "Instruments":
     from portfolio_analytics.ui.instruments_page import render as render_instruments

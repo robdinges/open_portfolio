@@ -20,9 +20,19 @@ from fastapi import APIRouter, HTTPException, Query
 
 from portfolio_analytics.api.schemas import (
     AllocationEntryResponse,
+    AttributionEntryResponse,
+    AttributionReportResponse,
+    BondAnalyticsEntryResponse,
+    BondAnalyticsReportResponse,
+    DataQualityIssueResponse,
+    DataQualityReportResponse,
+    HoldingPerformanceResponse,
     InstrumentResponse,
+    PerformancePointResponse,
+    PerformanceReportResponse,
     PortfolioOverviewResponse,
     PriceResponse,
+    RiskMetricsReportResponse,
     TransactionResponse,
 )
 from portfolio_analytics.domain.enums import AllocationDimension
@@ -121,6 +131,139 @@ def portfolio_transactions(portfolio_id: str):
     if not txs:
         raise HTTPException(status_code=404, detail="No transactions found")
     return [_tx_to_response(tx) for tx in txs]
+
+
+@router.get(
+    "/portfolio/{portfolio_id}/bond-analytics",
+    response_model=BondAnalyticsReportResponse,
+    tags=["Portfolio"],
+)
+def portfolio_bond_analytics(
+    portfolio_id: str,
+    date: Optional[str] = Query(None),
+):
+    as_of = _parse_date(date)
+    try:
+        report = analytics_service.get_bond_analytics(portfolio_id, as_of)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return BondAnalyticsReportResponse(
+        portfolio_id=report.portfolio_id,
+        currency=report.currency,
+        as_of=report.as_of,
+        entries=[
+            BondAnalyticsEntryResponse(**entry.__dict__) for entry in report.entries
+        ],
+        total_accrued_interest=report.total_accrued_interest,
+        total_dirty_value=report.total_dirty_value,
+        average_ytm=report.average_ytm,
+    )
+
+
+@router.get(
+    "/portfolio/{portfolio_id}/performance",
+    response_model=PerformanceReportResponse,
+    tags=["Portfolio"],
+)
+def portfolio_performance(
+    portfolio_id: str,
+    date: Optional[str] = Query(None),
+    lookback_days: int = Query(252, ge=20, le=2000),
+):
+    as_of = _parse_date(date)
+    try:
+        report = analytics_service.get_performance_report(portfolio_id, as_of, lookback_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return PerformanceReportResponse(
+        portfolio_id=report.portfolio_id,
+        currency=report.currency,
+        as_of=report.as_of,
+        start_date=report.start_date,
+        total_return=report.total_return,
+        annualized_return=report.annualized_return,
+        money_weighted_return=report.money_weighted_return,
+        time_weighted_return=report.time_weighted_return,
+        max_drawdown=report.max_drawdown,
+        series=[PerformancePointResponse(**point.__dict__) for point in report.series],
+        holdings=[
+            HoldingPerformanceResponse(
+                instrument_id=holding.instrument_id,
+                instrument_name=holding.instrument_name,
+                instrument_type=holding.instrument_type.value,
+                start_price=holding.start_price,
+                end_price=holding.end_price,
+                total_return=holding.total_return,
+                annualized_return=holding.annualized_return,
+                weight=holding.weight,
+                pnl_contribution=holding.pnl_contribution,
+            )
+            for holding in report.holdings
+        ],
+    )
+
+
+@router.get(
+    "/portfolio/{portfolio_id}/risk",
+    response_model=RiskMetricsReportResponse,
+    tags=["Portfolio"],
+)
+def portfolio_risk(
+    portfolio_id: str,
+    date: Optional[str] = Query(None),
+    lookback_days: int = Query(252, ge=20, le=2000),
+):
+    as_of = _parse_date(date)
+    try:
+        report = analytics_service.get_risk_metrics(portfolio_id, as_of, lookback_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return RiskMetricsReportResponse(**report.__dict__)
+
+
+@router.get(
+    "/portfolio/{portfolio_id}/attribution",
+    response_model=AttributionReportResponse,
+    tags=["Portfolio"],
+)
+def portfolio_attribution(
+    portfolio_id: str,
+    date: Optional[str] = Query(None),
+):
+    as_of = _parse_date(date)
+    try:
+        report = analytics_service.get_attribution_report(portfolio_id, as_of)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return AttributionReportResponse(
+        portfolio_id=report.portfolio_id,
+        currency=report.currency,
+        as_of=report.as_of,
+        by_instrument=[AttributionEntryResponse(**entry.__dict__) for entry in report.by_instrument],
+        by_asset_class=[AttributionEntryResponse(**entry.__dict__) for entry in report.by_asset_class],
+    )
+
+
+@router.get(
+    "/portfolio/{portfolio_id}/data-quality",
+    response_model=DataQualityReportResponse,
+    tags=["Portfolio"],
+)
+def portfolio_data_quality(
+    portfolio_id: str,
+    date: Optional[str] = Query(None),
+):
+    as_of = _parse_date(date)
+    try:
+        report = analytics_service.get_data_quality_report(portfolio_id, as_of)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return DataQualityReportResponse(
+        portfolio_id=report.portfolio_id,
+        as_of=report.as_of,
+        coverage_pct=report.coverage_pct,
+        issues=[DataQualityIssueResponse(**issue.__dict__) for issue in report.issues],
+    )
 
 
 # ===================================================================

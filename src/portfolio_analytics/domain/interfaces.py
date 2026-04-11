@@ -17,8 +17,13 @@ from typing import Optional
 from portfolio_analytics.domain.enums import AllocationDimension
 from portfolio_analytics.domain.models import (
     AllocationEntry,
+    AttributionReport,
+    BondAnalyticsReport,
+    DataQualityReport,
     Holding,
+    PerformanceReport,
     PortfolioOverview,
+    RiskMetricsReport,
     Transaction,
 )
 
@@ -121,3 +126,39 @@ class PortfolioAnalyticsServiceBase(ABC):
         self, portfolio_id: str, as_of: Optional[datetime] = None
     ) -> PortfolioOverview:
         """Full portfolio snapshot combining holdings, value, and P&L."""
+
+    @abstractmethod
+    def get_bond_analytics(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> BondAnalyticsReport:
+        """Bond-specific clean/dirty price, accrual, and yield metrics."""
+
+    @abstractmethod
+    def get_performance_report(
+        self,
+        portfolio_id: str,
+        as_of: Optional[datetime] = None,
+        lookback_days: int = 252,
+    ) -> PerformanceReport:
+        """Portfolio-level performance report over a lookback window."""
+
+    @abstractmethod
+    def get_risk_metrics(
+        self,
+        portfolio_id: str,
+        as_of: Optional[datetime] = None,
+        lookback_days: int = 252,
+    ) -> RiskMetricsReport:
+        """Portfolio-level risk metrics derived from historical returns."""
+
+    @abstractmethod
+    def get_attribution_report(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> AttributionReport:
+        """Contribution and attribution report by instrument and asset class."""
+
+    @abstractmethod
+    def get_data_quality_report(
+        self, portfolio_id: str, as_of: Optional[datetime] = None
+    ) -> DataQualityReport:
+        """Data completeness and freshness report for portfolio instruments."""
