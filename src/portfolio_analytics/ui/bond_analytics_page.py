@@ -46,4 +46,19 @@ def render(
         }
         for entry in report.entries
     ]
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    df = pd.DataFrame(rows)
+
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.subheader("YTM vs Duration")
+        chart_df = df[["Instrument", "YTM", "ModDur"]].copy()
+        chart_df["YTM"] = chart_df["YTM"].str.rstrip("%").astype(float)
+        chart_df = chart_df.set_index("Instrument")
+        st.scatter_chart(chart_df, x="ModDur", y="YTM", width="stretch")
+    with col_right:
+        st.subheader("Dirty Value by Instrument")
+        value_df = df[["Instrument", "Market Value"]].set_index("Instrument")
+        st.bar_chart(value_df, width="stretch")
+
+    st.subheader("Bond Detail")
+    st.dataframe(df, width="stretch", hide_index=True)

@@ -34,5 +34,8 @@ def render(
     if report.correlation_matrix:
         corr_df = pd.DataFrame(report.correlation_matrix)
         st.dataframe(corr_df, width="stretch")
+        st.subheader("Average Correlation by Instrument")
+        avg_corr = corr_df.mean(axis=1).to_frame(name="Avg Correlation")
+        st.bar_chart(avg_corr, width="stretch")
     else:
         st.info("Not enough return history to calculate correlation.")

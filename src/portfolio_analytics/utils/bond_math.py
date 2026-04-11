@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import calendar
 from datetime import date
+from typing import Iterable
+
+import numpy as np
 
 
 def add_months(d: date, months: int) -> date:
@@ -95,6 +98,145 @@ def simplified_ytm(
     if denominator <= 0:
         return 0.0
     return numerator / denominator
+
+
+def solve_ytm_from_clean_price(
+    settlement: date,
+    maturity: date,
+    clean_price_pct: float,
+    coupon_rate_pct: float,
+    frequency: int,
+    face_value: float = 100.0,
+    convention: str = "ACT/ACT",
+    max_iter: int = 100,
+    tolerance: float = 1e-8,
+) -> float:
+    """
+    Solve YTM from clean price using discounted coupon cash flows.
+
+    This uses a bisection method over a broad annual-yield range to provide
+    stable convergence for typical bond inputs.
+    """
+    if settlement >= maturity or clean_price_pct <= 0 or face_value <= 0:
+        return 0.0
+
+    coupon_rate_pct = max(coupon_rate_pct, 0.0)
+    frequency = max(frequency, 1)
+    accrued = accrued_interest(
+        settlement=settlement,
+        maturity=maturity,
+        coupon_rate_pct=coupon_rate_pct,
+        face_value=face_value,
+        frequency=frequency,
+        convention=convention,
+    )
+    target_dirty = (face_value * clean_price_pct / 100.0) + accrued
+
+    low = -0.95
+    high = 2.0
+    f_low = _price_error(settlement, maturity, coupon_rate_pct, low, frequency, face_value, target_dirty)
+    f_high = _price_error(settlement, maturity, coupon_rate_pct, high, frequency, face_value, target_dirty)
+
+    if abs(f_low) < tolerance:
+        return low
+    if abs(f_high) < tolerance:
+        return high
+
+    if f_low * f_high > 0:
+        return simplified_ytm(
+            clean_price_pct=clean_price_pct,
+            coupon_rate_pct=coupon_rate_pct,
+            years_to_maturity=max((maturity - settlement).days / 365.0, 0.01),
+            face_value=face_value,
+        )
+
+    for _ in range(max_iter):
+        mid = (low + high) / 2.0
+        f_mid = _price_error(
+            settlement, maturity, coupon_rate_pct, mid, frequency, face_value, target_dirty
+        )
+        if abs(f_mid) < tolerance:
+            return mid
+        if f_low * f_mid < 0:
+            high = mid
+            f_high = f_mid
+        else:
+            low = mid
+            f_low = f_mid
+    return (low + high) / 2.0
+
+
+def xirr(cash_flows: Iterable[tuple[date, float]], guess: float = 0.08) -> float:
+    """Compute annualized money-weighted return from dated cash flows."""
+    flows = sorted(cash_flows, key=lambda item: item[0])
+    if len(flows) < 2:
+        return 0.0
+    amounts = [amount for _, amount in flows]
+    if not any(amount > 0 for amount in amounts) or not any(amount < 0 for amount in amounts):
+        return 0.0
+
+    t0 = flows[0][0]
+    year_fractions = [(d - t0).days / 365.0 for d, _ in flows]
+
+    def npv(rate: float) -> float:
+        if rate <= -0.9999:
+            return float("inf")
+        return sum(amount / ((1.0 + rate) ** t) for amount, t in zip(amounts, year_fractions))
+
+    low, high = -0.95, 3.0
+    f_low, f_high = npv(low), npv(high)
+    if f_low * f_high > 0:
+        return _newton_xirr(npv, guess)
+
+    for _ in range(120):
+        mid = (low + high) / 2.0
+        f_mid = npv(mid)
+        if abs(f_mid) < 1e-8:
+            return mid
+        if f_low * f_mid < 0:
+            high, f_high = mid, f_mid
+        else:
+            low, f_low = mid, f_mid
+    return (low + high) / 2.0
+
+
+def _price_error(
+    settlement: date,
+    maturity: date,
+    coupon_rate_pct: float,
+    ytm: float,
+    frequency: int,
+    face_value: float,
+    target_dirty_price: float,
+) -> float:
+    schedule = coupon_schedule(settlement, maturity, max(frequency, 1))
+    if not schedule:
+        return -target_dirty_price
+    coupon = face_value * (coupon_rate_pct / 100.0) / max(frequency, 1)
+    period_rate = ytm / max(frequency, 1)
+    dirty = 0.0
+    for idx, pay_date in enumerate(schedule, start=1):
+        cash_flow = coupon + (face_value if pay_date == maturity else 0.0)
+        discount = (1 + period_rate) ** idx if period_rate > -1 else 1.0
+        dirty += cash_flow / discount
+    return dirty - target_dirty_price
+
+
+def _newton_xirr(npv_fn, guess: float) -> float:
+    rate = guess
+    for _ in range(80):
+        fx = npv_fn(rate)
+        if abs(fx) < 1e-8:
+            return rate
+        h = 1e-6
+        dfx = (npv_fn(rate + h) - npv_fn(rate - h)) / (2 * h)
+        if abs(dfx) < 1e-12:
+            break
+        rate_next = rate - fx / dfx
+        if rate_next <= -0.9999 or not np.isfinite(rate_next):
+            break
+        rate = rate_next
+    return rate
 
 
 def macaulay_duration(

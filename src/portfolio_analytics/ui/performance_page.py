@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from portfolio_analytics.domain.interfaces import PortfolioAnalyticsServiceBase
-from portfolio_analytics.utils.currency import format_currency, format_pct
+from portfolio_analytics.utils.currency import format_pct
 
 
 def render(
@@ -31,6 +31,10 @@ def render(
     ).set_index("Date")
     st.line_chart(series_df, width="stretch")
 
+    drawdown = (series_df["Portfolio Value"] / series_df["Portfolio Value"].cummax()) - 1
+    st.subheader("Drawdown")
+    st.area_chart(drawdown.to_frame(name="Drawdown"), width="stretch")
+
     st.subheader("Holding Performance")
     rows = [
         {
@@ -45,4 +49,17 @@ def render(
         }
         for holding in report.holdings
     ]
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    holdings_df = pd.DataFrame(rows)
+    st.dataframe(holdings_df, width="stretch", hide_index=True)
+
+    st.subheader("P&L Contribution")
+    contrib_df = pd.DataFrame(
+        [
+            {
+                "Instrument": holding.instrument_name,
+                "Contribution": holding.pnl_contribution,
+            }
+            for holding in report.holdings
+        ]
+    ).set_index("Instrument")
+    st.bar_chart(contrib_df, width="stretch")

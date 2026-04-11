@@ -24,6 +24,26 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+        """
+        <style>
+            .stMetric {
+                background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+                border: 1px solid #dbe4ff;
+                border-radius: 12px;
+                padding: 0.5rem 0.75rem;
+            }
+            h1, h2, h3 {
+                letter-spacing: 0.2px;
+            }
+            .stTabs [data-baseweb="tab"] {
+                font-weight: 600;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+)
+
 st.title(config.streamlit_page_title)
 
 # Sidebar — portfolio selector

@@ -21,7 +21,6 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 import numpy as np
-import numpy_financial as npf
 import pandas as pd
 
 from portfolio_analytics.domain.enums import (
@@ -48,7 +47,6 @@ from portfolio_analytics.domain.models import (
     PerformanceReport,
     PortfolioOverview,
     RiskMetricsReport,
-    Transaction,
 )
 from portfolio_analytics.repositories.base import (
     CashAccountRepository,
@@ -61,7 +59,8 @@ from portfolio_analytics.utils.bond_math import (
     convexity,
     macaulay_duration,
     modified_duration,
-    simplified_ytm,
+    solve_ytm_from_clean_price,
+    xirr,
 )
 
 
@@ -280,7 +279,6 @@ class PortfolioAnalyticsService(PortfolioAnalyticsServiceBase):
                 or f"{int(metadata.get('maturity_year', as_of.year))}-12-31"
             )
 
-            years_to_maturity = max((maturity_date.date() - as_of.date()).days / 365.0, 0.0)
             accrued_per_100 = accrued_interest(
                 settlement=as_of.date(),
                 maturity=maturity_date.date(),
@@ -290,11 +288,14 @@ class PortfolioAnalyticsService(PortfolioAnalyticsServiceBase):
                 convention=day_count,
             )
             dirty_price = holding.market_price + accrued_per_100
-            ytm = simplified_ytm(
+            ytm = solve_ytm_from_clean_price(
+                settlement=as_of.date(),
+                maturity=maturity_date.date(),
                 clean_price_pct=holding.market_price,
                 coupon_rate_pct=coupon_rate,
-                years_to_maturity=max(years_to_maturity, 0.01),
+                frequency=payment_frequency,
                 face_value=face_value,
+                convention=day_count,
             )
             mac_duration = macaulay_duration(
                 settlement=as_of.date(),
@@ -372,8 +373,8 @@ class PortfolioAnalyticsService(PortfolioAnalyticsServiceBase):
         total_return = ((end_value / start_value) - 1) if start_value > 0 else 0.0
         elapsed_days = max((as_of - start_date).days, 1)
         annualized_return = ((1 + total_return) ** (365 / elapsed_days) - 1) if start_value > 0 else 0.0
-        returns = pd.Series(values).pct_change().dropna()
-        time_weighted_return = float((1 + returns).prod() - 1) if not returns.empty else 0.0
+        flow_series = self._external_cash_flows_by_day(portfolio_id, start_date, as_of)
+        time_weighted_return = self._time_weighted_return(series, flow_series)
         money_weighted_return = self._money_weighted_return(portfolio_id, start_date, as_of, start_value, end_value)
         max_drawdown = self._max_drawdown(values)
 
@@ -609,25 +610,39 @@ class PortfolioAnalyticsService(PortfolioAnalyticsServiceBase):
         start_value: float,
         end_value: float,
     ) -> float:
-        txs = self._transactions.list_by_portfolio(portfolio_id, up_to=end)
-        daily_flows = {}
-        for tx in txs:
-            if tx.timestamp < start or tx.timestamp > end:
+        dated_flows: list[tuple[date, float]] = [(start.date(), -start_value)]
+        daily_flows = self._external_cash_flows_by_day(portfolio_id, start, end)
+        for flow_date, flow_amount in sorted(daily_flows.items()):
+            if flow_date == start.date() or flow_date == end.date():
                 continue
-            if tx.instrument_id is None and tx.type != TransactionType.FX:
-                key = tx.timestamp.date()
-                daily_flows[key] = daily_flows.get(key, 0.0) + tx.amount
-        dates = pd.date_range(start=start.date(), end=end.date(), freq="B")
-        cash_flows = [-start_value]
-        for ts in dates[1:-1]:
-            cash_flows.append(-daily_flows.get(ts.date(), 0.0))
-        cash_flows.append(end_value)
-        if len(cash_flows) < 2:
+            dated_flows.append((flow_date, -flow_amount))
+        dated_flows.append((end.date(), end_value))
+        if len(dated_flows) < 2:
             return 0.0
-        irr = npf.irr(cash_flows)
-        if irr is None or np.isnan(irr):
+        irr = xirr(dated_flows)
+        if irr is None or np.isnan(irr) or not np.isfinite(irr):
             return 0.0
-        return float((1 + irr) ** 252 - 1)
+        return float(irr)
+
+    def _time_weighted_return(
+        self,
+        series: list[PerformancePoint],
+        daily_external_flows: dict[date, float],
+    ) -> float:
+        if len(series) < 2:
+            return 0.0
+        subperiod_returns: list[float] = []
+        for idx in range(1, len(series)):
+            prev_value = series[idx - 1].portfolio_value
+            if prev_value <= 0:
+                continue
+            current_date = series[idx].timestamp.date()
+            external_flow = daily_external_flows.get(current_date, 0.0)
+            period_return = (series[idx].portfolio_value - series[idx - 1].portfolio_value - external_flow) / prev_value
+            subperiod_returns.append(period_return)
+        if not subperiod_returns:
+            return 0.0
+        return float(np.prod([1 + r for r in subperiod_returns]) - 1)
 
     def _max_drawdown(self, values: np.ndarray) -> float:
         if values.size == 0:
@@ -635,6 +650,22 @@ class PortfolioAnalyticsService(PortfolioAnalyticsServiceBase):
         running_max = np.maximum.accumulate(values)
         drawdowns = np.where(running_max > 0, (values / running_max) - 1, 0)
         return float(abs(drawdowns.min()))
+
+    def _external_cash_flows_by_day(
+        self, portfolio_id: str, start: datetime, end: datetime
+    ) -> dict[date, float]:
+        txs = self._transactions.list_by_portfolio(portfolio_id, up_to=end)
+        flows: dict[date, float] = {}
+        for tx in txs:
+            if tx.timestamp < start or tx.timestamp > end:
+                continue
+            if tx.type == TransactionType.FX:
+                continue
+            if tx.instrument_id is not None:
+                continue
+            flow_day = tx.timestamp.date()
+            flows[flow_day] = flows.get(flow_day, 0.0) + tx.amount
+        return flows
 
     def _correlation_matrix(
         self, portfolio_id: str, as_of: datetime, lookback_days: int
